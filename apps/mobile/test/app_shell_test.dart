@@ -5,9 +5,11 @@ import 'package:mittiandmiles/core/config/api_config.dart';
 import 'package:mittiandmiles/core/session/session_capabilities.dart';
 import 'package:mittiandmiles/features/admin/admin_gate.dart';
 
+const testApiConfig = ApiConfig(baseUrl: 'http://localhost:3000');
+
 void main() {
   testWidgets('default session shows traveller and host and hides admin', (tester) async {
-    await tester.pumpWidget(const MittiApp());
+    await tester.pumpWidget(const MittiApp(apiConfig: testApiConfig));
 
     expect(find.text('Traveller'), findsWidgets);
     expect(find.text('Discover local experiences. Listings are not available in this build.'), findsOneWidget);
@@ -34,6 +36,7 @@ void main() {
   testWidgets('server-granted admin shows a placeholder without workflows', (tester) async {
     await tester.pumpWidget(
       const MittiApp(
+        apiConfig: testApiConfig,
         capabilities: SessionCapabilities(adminAccess: true),
       ),
     );
@@ -46,9 +49,9 @@ void main() {
     expect(find.text('Host verification'), findsNothing);
   });
 
-  testWidgets('api config stays on the local development origin', (tester) async {
-    await tester.pumpWidget(const MittiApp());
+  testWidgets('api config exposes the injected base url', (tester) async {
+    await tester.pumpWidget(const MittiApp(apiConfig: testApiConfig));
     final context = tester.element(find.text('Traveller').first);
-    expect(ApiConfigScope.of(context).baseUrl, 'http://localhost:3000');
+    expect(ApiConfigScope.of(context).baseUrl, testApiConfig.baseUrl);
   });
 }

@@ -34,6 +34,7 @@ jobs:
       - name: Analyze and test
         working-directory: apps/mobile
         run: |
+          cp .env.example .env
           flutter pub get
           flutter analyze
           flutter test

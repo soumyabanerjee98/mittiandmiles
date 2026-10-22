@@ -53,11 +53,14 @@ Flutter:
 
 ```bash
 cd apps/mobile
+cp .env.example .env
 flutter pub get
 flutter analyze
 flutter test
 flutter run
 ```
+
+On Windows PowerShell, copy the env file with `Copy-Item .env.example .env`. Set `API_BASE_URL` in `.env` to your API origin (for example `http://localhost:3000` or a deployed `apps/api` URL). `.env` is gitignored; only `.env.example` is committed.
 
 The app opens on the traveller placeholder. Host is a second tab. Admin is absent unless a server-issued capability is supplied in code. There is no control in the app that grants admin access. No screen calls the API yet.
 
@@ -92,6 +95,6 @@ API development:
 - `supertest` and `@types/supertest` — HTTP tests
 - `@types/express`, `@types/node`
 
-Flutter uses the Flutter SDK, `flutter_test`, and `flutter_lints`. No routing, HTTP, or state-management package was added. The Supabase client library is not added; the API will use the Postgres connection string.
+Flutter uses the Flutter SDK, `flutter_test`, `flutter_lints`, and `flutter_dotenv` for `API_BASE_URL` in `.env`. No routing, HTTP client, or state-management package was added yet. The Supabase client library is not added; the API will use the Postgres connection string.
 
 These do not change the modular-monolith architecture. Ask before adding a package that would.

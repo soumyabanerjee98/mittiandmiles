@@ -7,8 +7,8 @@ import 'package:mittiandmiles/features/shell/app_shell.dart';
 class MittiApp extends StatelessWidget {
   const MittiApp({
     super.key,
+    required this.apiConfig,
     this.capabilities = SessionCapabilities.unauthorised,
-    this.apiConfig = const ApiConfig(),
   });
 
   /// Server-issued capabilities. Defaults to deny. There is no client control

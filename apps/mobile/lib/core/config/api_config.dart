@@ -1,10 +1,23 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Development API origin. No network client is attached in Phase 1.
+const apiBaseUrlKey = 'API_BASE_URL';
+
+/// API origin loaded from `.env` (`API_BASE_URL`). No network client in Phase 1.
 class ApiConfig {
-  const ApiConfig({this.baseUrl = 'http://localhost:3000'});
+  const ApiConfig({required this.baseUrl});
 
   final String baseUrl;
+
+  static ApiConfig fromEnv() {
+    final baseUrl = dotenv.env[apiBaseUrlKey]?.trim();
+    if (baseUrl == null || baseUrl.isEmpty) {
+      throw StateError(
+        '$apiBaseUrlKey is missing or empty. Copy .env.example to .env.',
+      );
+    }
+    return ApiConfig(baseUrl: baseUrl);
+  }
 }
 
 class ApiConfigScope extends InheritedWidget {
