@@ -8,6 +8,24 @@ jobs:
   api:
     name: API checks
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mittiandmiles_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-timeout 5s
+          --health-interval 10s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mittiandmiles_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/mittiandmiles_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mittiandmiles_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,10 +33,11 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - name: Install and check
+      - name: Install, migrate, and check
         working-directory: apps/api
         run: |
           npm ci
+          npx prisma migrate deploy
           npm run check
 
   mobile:

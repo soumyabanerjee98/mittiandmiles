@@ -1,0 +1,875 @@
+// Phase 2 domain schema. PostgreSQL on Supabase is authoritative.
+// Money is integer minor units plus an ISO currency code.
+// Instants are UTC. City and experience schedules keep an IANA time zone.
+// Identity documents are storage references only. No card data.
+// Payment tables exist so later phases can migrate forward. Nothing here
+// captures or confirms a payment.
+// Commission rows are versioned configuration. This schema does not choose
+// a rate. 15% in the product notes is an example, not a stored default.
+// Authentication provider is unresolved. Users store an external subject.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum Role {
+  TRAVELLER
+  HOST
+  OPERATIONS
+  SUPPORT
+  VERIFICATION
+  FINANCE
+  SUPER_ADMIN
+}
+
+enum HostVerificationStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum HostOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  COMPLETE
+}
+
+enum PublicProfileStatus {
+  HIDDEN
+  VISIBLE
+}
+
+enum DocumentType {
+  IDENTITY
+  ADDRESS
+  CREDENTIAL
+  OTHER
+}
+
+enum DocumentVerificationState {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum CityStatus {
+  INACTIVE
+  ACTIVE
+}
+
+enum ListingStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  REJECTED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum ImageModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SlotStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum ReservationState {
+  HELD
+  CONFIRMED
+  RELEASED
+  EXPIRED
+}
+
+enum TripRequestStatus {
+  OPEN
+  CLOSED
+  EXPIRED
+  CANCELLED
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  WITHDRAWN
+  EXPIRED
+  REJECTED
+}
+
+enum BookingStatus {
+  REQUESTED
+  AWAITING_PAYMENT
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETION_PENDING
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  DISPUTED
+  NO_SHOW
+}
+
+enum AttendanceState {
+  EXPECTED
+  CHECKED_IN
+  ABSENT
+}
+
+enum CheckInMethod {
+  HOST_CODE
+  PARTICIPANT_CODE
+  MANUAL
+}
+
+enum CheckInPolicyResult {
+  ACCEPTED
+  REJECTED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  VERIFIED
+  REJECTED
+  PROCESSED
+  FAILED
+}
+
+enum RefundStatus {
+  REQUESTED
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum LedgerAccountStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum LedgerTransactionType {
+  BOOKING_CHARGE
+  REFUND
+  PAYOUT
+  COMMISSION
+  ADJUSTMENT
+}
+
+enum PayoutStatus {
+  PENDING_ELIGIBILITY
+  ELIGIBLE
+  SUBMITTED
+  SETTLED
+  FAILED
+  ON_HOLD
+}
+
+enum CommissionBasis {
+  PERCENTAGE_BPS
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum MessageModerationStatus {
+  PENDING
+  VISIBLE
+  HIDDEN
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
+enum ReportStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+enum AuditOutcome {
+  ALLOWED
+  DENIED
+}
+
+enum OutboxState {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  email         String        @unique @db.VarChar(320)
+  phone         String?       @unique @db.VarChar(32)
+  authProvider  String        @map("auth_provider") @db.VarChar(64)
+  authSubject   String        @map("auth_subject") @db.VarChar(128)
+  accountStatus AccountStatus @default(ACTIVE) @map("account_status")
+  locale        String        @default("en") @db.VarChar(35)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  travellerProfile  TravellerProfile?
+  hostProfile       HostProfile?
+  roles             UserRole[]
+  tripRequests      TripRequest[]      @relation("TripRequestTraveller")
+  bookings          Booking[]          @relation("BookingTraveller")
+  bookingEvents     BookingEvent[]     @relation("BookingEventActor")
+  checkIns          CheckIn[]          @relation("CheckInActor")
+  messages          Message[]          @relation("MessageSender")
+  reviewsWritten    Review[]           @relation("ReviewReviewer")
+  reviewsReceived   Review[]           @relation("ReviewReviewee")
+  reportsFiled      Report[]           @relation("ReportReporter")
+  reportsReceived   Report[]           @relation("ReportReportedUser")
+  ticketsRequested  SupportTicket[]    @relation("TicketRequester")
+  ticketsAssigned   SupportTicket[]    @relation("TicketAssignee")
+  documentsReviewed HostDocument[]     @relation("DocumentReviewer")
+  auditLogs         AuditLog[]         @relation("AuditActor")
+
+  @@unique([authProvider, authSubject])
+  @@index([accountStatus])
+  @@map("users")
+}
+
+model TravellerProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  displayName String   @map("display_name") @db.VarChar(120)
+  countryCode String?  @map("country_code") @db.VarChar(2)
+  languages   String[] @default([]) @map("language_preferences")
+  interests   String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("traveller_profiles")
+}
+
+model HostProfile {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  userId                  String                 @unique @map("user_id") @db.Uuid
+  publicName              String                 @map("public_name") @db.VarChar(120)
+  bio                     String?                @db.Text
+  verificationStatus      HostVerificationStatus @default(NOT_STARTED) @map("verification_status")
+  onboardingStatus        HostOnboardingStatus   @default(NOT_STARTED) @map("onboarding_status")
+  payoutProviderReference String?                @map("payout_provider_reference") @db.VarChar(128)
+  publicProfileStatus     PublicProfileStatus    @default(HIDDEN) @map("public_profile_status")
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  documents    HostDocument[]
+  experiences  Experience[]
+  offers       Offer[]
+  bookings     Booking[]       @relation("BookingHost")
+  payouts      Payout[]
+
+  @@index([verificationStatus])
+  @@map("host_profiles")
+}
+
+/// Storage reference only. Document bytes stay in private object storage.
+model HostDocument {
+  id                String                    @id @default(uuid()) @db.Uuid
+  hostId            String                    @map("host_id") @db.Uuid
+  documentType      DocumentType              @map("document_type")
+  storageReference  String                    @map("storage_reference") @db.VarChar(512)
+  verificationState DocumentVerificationState @default(PENDING) @map("verification_state")
+  reviewerId        String?                   @map("reviewer_id") @db.Uuid
+  reviewedAt        DateTime?                 @map("reviewed_at") @db.Timestamptz(3)
+  retainUntil       DateTime?                 @map("retain_until") @db.Timestamptz(3)
+  deletedAt         DateTime?                 @map("deleted_at") @db.Timestamptz(3)
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  host     HostProfile @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  reviewer User?       @relation("DocumentReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([hostId])
+  @@map("host_documents")
+}
+
+/// Empty scope means a global grant. Non-empty scopes are stored and ignored
+/// until a scoping rule is confirmed. Clients cannot write this table.
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      Role
+  scope     String   @default("") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, role, scope])
+  @@index([role])
+  @@map("user_roles")
+}
+
+model City {
+  id           String     @id @default(uuid()) @db.Uuid
+  slug         String     @unique @db.VarChar(80)
+  name         String     @db.VarChar(120)
+  state        String     @db.VarChar(120)
+  countryCode  String     @map("country_code") @db.VarChar(2)
+  timezone     String     @db.VarChar(64)
+  status       CityStatus @default(INACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  experiences  Experience[]
+  tripRequests TripRequest[]
+
+  @@index([status])
+  @@map("cities")
+}
+
+model Experience {
+  id                 String        @id @default(uuid()) @db.Uuid
+  hostId             String        @map("host_id") @db.Uuid
+  cityId             String        @map("city_id") @db.Uuid
+  category           String        @db.VarChar(80)
+  title              String        @db.VarChar(160)
+  description        String        @db.Text
+  durationMinutes    Int           @map("duration_minutes")
+  basePriceMinor     Int           @map("base_price_minor")
+  currency           String        @db.VarChar(3)
+  capacity           Int
+  listingStatus      ListingStatus @default(DRAFT) @map("listing_status")
+  inclusions         String        @db.Text
+  exclusions         String        @db.Text
+  meetingArea        String        @map("meeting_area") @db.VarChar(240)
+  accessibilityNotes String        @default("") @map("accessibility_notes") @db.Text
+  safetyNotes        String        @default("") @map("safety_notes") @db.Text
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  host      HostProfile          @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  city      City                 @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  languages ExperienceLanguage[]
+  images    ExperienceImage[]
+  slots     ExperienceSlot[]
+  bookings  Booking[]
+
+  @@index([hostId])
+  @@index([cityId, listingStatus])
+  @@map("experiences")
+}
+
+model ExperienceLanguage {
+  experienceId String @map("experience_id") @db.Uuid
+  languageCode String @map("language_code") @db.VarChar(16)
+
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+
+  @@id([experienceId, languageCode])
+  @@map("experience_languages")
+}
+
+model ExperienceImage {
+  id                String                @id @default(uuid()) @db.Uuid
+  experienceId      String                @map("experience_id") @db.Uuid
+  storageReference  String                @map("storage_reference") @db.VarChar(512)
+  sortOrder         Int                   @map("sort_order")
+  moderationStatus  ImageModerationStatus @default(PENDING) @map("moderation_status")
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+
+  @@index([experienceId, sortOrder])
+  @@map("experience_images")
+}
+
+model ExperienceSlot {
+  id           String     @id @default(uuid()) @db.Uuid
+  experienceId String     @map("experience_id") @db.Uuid
+  startsAt     DateTime   @map("starts_at") @db.Timestamptz(3)
+  endsAt       DateTime   @map("ends_at") @db.Timestamptz(3)
+  capacity     Int
+  status       SlotStatus @default(OPEN)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  experience   Experience        @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+  reservations SlotReservation[]
+
+  @@index([experienceId, startsAt])
+  @@map("experience_slots")
+}
+
+model SlotReservation {
+  id        String           @id @default(uuid()) @db.Uuid
+  slotId    String           @map("slot_id") @db.Uuid
+  bookingId String           @map("booking_id") @db.Uuid
+  quantity  Int
+  expiresAt DateTime?        @map("expires_at") @db.Timestamptz(3)
+  state     ReservationState
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  slot    ExperienceSlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  booking Booking        @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([slotId, state])
+  @@index([bookingId])
+  @@map("slot_reservations")
+}
+
+model TripRequest {
+  id           String            @id @default(uuid()) @db.Uuid
+  travellerId  String            @map("traveller_id") @db.Uuid
+  cityId       String            @map("city_id") @db.Uuid
+  startsOn     DateTime          @map("starts_on") @db.Date
+  endsOn       DateTime          @map("ends_on") @db.Date
+  partySize    Int               @map("party_size")
+  budgetMinor  Int?              @map("budget_minor")
+  currency     String            @db.VarChar(3)
+  preferences  Json              @default("{}")
+  status       TripRequestStatus @default(OPEN)
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  traveller     User           @relation("TripRequestTraveller", fields: [travellerId], references: [id], onDelete: Restrict)
+  city          City           @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  offers        Offer[]
+  conversations Conversation[]
+
+  @@index([travellerId, status])
+  @@index([cityId, status])
+  @@map("trip_requests")
+}
+
+model Offer {
+  id             String      @id @default(uuid()) @db.Uuid
+  requestId      String      @map("request_id") @db.Uuid
+  hostId         String      @map("host_id") @db.Uuid
+  proposedStartsAt DateTime  @map("proposed_starts_at") @db.Timestamptz(3)
+  proposedEndsAt DateTime    @map("proposed_ends_at") @db.Timestamptz(3)
+  priceMinor     Int         @map("price_minor")
+  currency       String      @db.VarChar(3)
+  inclusions     String      @db.Text
+  exclusions     String      @db.Text
+  policySnapshot Json        @map("policy_snapshot")
+  expiresAt      DateTime    @map("expires_at") @db.Timestamptz(3)
+  status         OfferStatus @default(PENDING)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  request TripRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  host    HostProfile @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  booking Booking?
+
+  @@index([requestId, status])
+  @@index([hostId, status])
+  @@map("offers")
+}
+
+model Booking {
+  id                          String        @id @default(uuid()) @db.Uuid
+  travellerId                 String        @map("traveller_id") @db.Uuid
+  hostId                      String        @map("host_id") @db.Uuid
+  experienceId                String?       @map("experience_id") @db.Uuid
+  offerId                     String?       @unique @map("offer_id") @db.Uuid
+  status                      BookingStatus @default(REQUESTED)
+  startsAt                    DateTime      @map("starts_at") @db.Timestamptz(3)
+  endsAt                      DateTime      @map("ends_at") @db.Timestamptz(3)
+  participantCount            Int           @map("participant_count")
+  currency                    String        @db.VarChar(3)
+  subtotalMinor               Int           @map("subtotal_minor")
+  discountMinor               Int           @default(0) @map("discount_minor")
+  taxMinor                    Int           @default(0) @map("tax_minor")
+  totalMinor                  Int           @map("total_minor")
+  commissionPolicyId          String?       @map("commission_policy_id") @db.Uuid
+  commissionMinor             Int           @map("commission_minor")
+  hostGrossMinor              Int           @map("host_gross_minor")
+  cancellationPolicySnapshot  Json          @map("cancellation_policy_snapshot")
+  experienceSnapshot          Json          @map("experience_snapshot")
+  createdAt                   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  traveller          User                @relation("BookingTraveller", fields: [travellerId], references: [id], onDelete: Restrict)
+  host               HostProfile         @relation("BookingHost", fields: [hostId], references: [id], onDelete: Restrict)
+  experience         Experience?         @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+  offer              Offer?              @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  commissionPolicy   CommissionPolicy?   @relation(fields: [commissionPolicyId], references: [id], onDelete: Restrict)
+  participants       BookingParticipant[]
+  events             BookingEvent[]
+  checkIns           CheckIn[]
+  reservations       SlotReservation[]
+  paymentAttempts    PaymentAttempt[]
+  refunds            Refund[]
+  ledgerTransactions LedgerTransaction[]
+  reviews            Review[]
+  reports            Report[]
+  tickets            SupportTicket[]
+  conversations      Conversation[]
+  payoutAllocations  PayoutAllocation[]
+
+  @@index([travellerId, status])
+  @@index([hostId, status])
+  @@index([experienceId])
+  @@map("bookings")
+}
+
+model BookingParticipant {
+  id            String          @id @default(uuid()) @db.Uuid
+  bookingId     String          @map("booking_id") @db.Uuid
+  displayLabel  String          @default("") @map("display_label") @db.VarChar(120)
+  attendance    AttendanceState @default(EXPECTED)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId])
+  @@map("booking_participants")
+}
+
+/// Append-only for application roles.
+model BookingEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  bookingId  String   @map("booking_id") @db.Uuid
+  eventType  String   @map("event_type") @db.VarChar(64)
+  actorId    String?  @map("actor_id") @db.Uuid
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  actor   User?   @relation("BookingEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
+}
+
+model CheckIn {
+  id         String               @id @default(uuid()) @db.Uuid
+  bookingId  String               @map("booking_id") @db.Uuid
+  actorId    String               @map("actor_id") @db.Uuid
+  method     CheckInMethod
+  verifiedAt DateTime             @map("verified_at") @db.Timestamptz(3)
+  policyResult CheckInPolicyResult @map("policy_result")
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  actor   User    @relation("CheckInActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId])
+  @@map("check_ins")
+}
+
+model PaymentAttempt {
+  id                   String               @id @default(uuid()) @db.Uuid
+  bookingId            String               @map("booking_id") @db.Uuid
+  provider             String               @db.VarChar(64)
+  providerOrderRef     String?              @map("provider_order_ref") @db.VarChar(128)
+  providerPaymentRef   String?              @map("provider_payment_ref") @db.VarChar(128)
+  amountMinor          Int                  @map("amount_minor")
+  currency             String               @db.VarChar(3)
+  status               PaymentAttemptStatus @default(CREATED)
+  idempotencyKey       String               @unique @map("idempotency_key") @db.VarChar(128)
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, status])
+  @@map("payment_attempts")
+}
+
+model WebhookEvent {
+  id                String                  @id @default(uuid()) @db.Uuid
+  provider          String                  @db.VarChar(64)
+  providerEventId   String                  @map("provider_event_id") @db.VarChar(128)
+  signatureValid    Boolean                 @map("signature_valid")
+  processingStatus  WebhookProcessingStatus @map("processing_status")
+  receivedAt        DateTime                @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt       DateTime?               @map("processed_at") @db.Timestamptz(3)
+  payload           Json                    @default("{}")
+
+  @@unique([provider, providerEventId])
+  @@index([processingStatus])
+  @@map("webhook_events")
+}
+
+model Refund {
+  id                String       @id @default(uuid()) @db.Uuid
+  bookingId         String       @map("booking_id") @db.Uuid
+  provider          String       @db.VarChar(64)
+  providerRefundRef String?      @map("provider_refund_ref") @db.VarChar(128)
+  amountMinor       Int          @map("amount_minor")
+  reasonCode        String       @map("reason_code") @db.VarChar(64)
+  status            RefundStatus @default(REQUESTED)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, status])
+  @@map("refunds")
+}
+
+model LedgerAccount {
+  id          String              @id @default(uuid()) @db.Uuid
+  code        String              @unique @db.VarChar(64)
+  accountType LedgerAccountType   @map("account_type")
+  currency    String              @db.VarChar(3)
+  status      LedgerAccountStatus @default(ACTIVE)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  entries LedgerEntry[]
+
+  @@map("ledger_accounts")
+}
+
+/// Append-only. Corrections are new compensating transactions.
+model LedgerTransaction {
+  id             String                @id @default(uuid()) @db.Uuid
+  transactionType LedgerTransactionType @map("transaction_type")
+  bookingId      String?               @map("booking_id") @db.Uuid
+  idempotencyKey String                @unique @map("idempotency_key") @db.VarChar(128)
+  currency       String                @db.VarChar(3)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking?      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  entries LedgerEntry[]
+
+  @@index([bookingId])
+  @@map("ledger_transactions")
+}
+
+/// Append-only. A posted transaction must balance in its currency.
+model LedgerEntry {
+  id            String @id @default(uuid()) @db.Uuid
+  transactionId String @map("transaction_id") @db.Uuid
+  accountId     String @map("account_id") @db.Uuid
+  debitMinor    Int    @default(0) @map("debit_minor")
+  creditMinor   Int    @default(0) @map("credit_minor")
+
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account     LedgerAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([accountId])
+  @@map("ledger_entries")
+}
+
+model Payout {
+  id                  String       @id @default(uuid()) @db.Uuid
+  hostId              String       @map("host_id") @db.Uuid
+  provider            String       @db.VarChar(64)
+  providerPayoutRef   String?      @map("provider_payout_ref") @db.VarChar(128)
+  amountMinor         Int          @map("amount_minor")
+  currency            String       @db.VarChar(3)
+  status              PayoutStatus @default(PENDING_ELIGIBILITY)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  settledAt           DateTime?    @map("settled_at") @db.Timestamptz(3)
+
+  host        HostProfile        @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  allocations PayoutAllocation[]
+
+  @@index([hostId, status])
+  @@map("payouts")
+}
+
+model PayoutAllocation {
+  id           String @id @default(uuid()) @db.Uuid
+  payoutId     String @map("payout_id") @db.Uuid
+  bookingId    String @map("booking_id") @db.Uuid
+  amountMinor  Int    @map("amount_minor")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payout  Payout  @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([payoutId, bookingId])
+  @@index([bookingId])
+  @@map("payout_allocations")
+}
+
+/// History is insert-only. Do not treat any row as the chosen business rate.
+model CommissionPolicy {
+  id            String           @id @default(uuid()) @db.Uuid
+  version       String           @unique @db.VarChar(64)
+  effectiveFrom DateTime         @map("effective_from") @db.Timestamptz(3)
+  effectiveTo   DateTime?        @map("effective_to") @db.Timestamptz(3)
+  basis         CommissionBasis
+  rateBps       Int              @map("rate_bps")
+  eligibility   Json             @default("{}")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  bookings Booking[]
+
+  @@map("commission_policies")
+}
+
+model Conversation {
+  id        String             @id @default(uuid()) @db.Uuid
+  requestId String?            @map("request_id") @db.Uuid
+  bookingId String?            @map("booking_id") @db.Uuid
+  status    ConversationStatus @default(OPEN)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  request  TripRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  booking  Booking?     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  messages Message[]
+
+  @@index([requestId])
+  @@index([bookingId])
+  @@map("conversations")
+}
+
+model Message {
+  id               String                  @id @default(uuid()) @db.Uuid
+  conversationId   String                  @map("conversation_id") @db.Uuid
+  senderId         String                  @map("sender_id") @db.Uuid
+  content          String                  @db.Text
+  moderationStatus MessageModerationStatus @default(PENDING) @map("moderation_status")
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model Review {
+  id         String       @id @default(uuid()) @db.Uuid
+  bookingId  String       @map("booking_id") @db.Uuid
+  reviewerId String       @map("reviewer_id") @db.Uuid
+  revieweeId String       @map("reviewee_id") @db.Uuid
+  rating     Int
+  content    String       @db.Text
+  status     ReviewStatus @default(PENDING)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking  Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  reviewer User    @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  reviewee User    @relation("ReviewReviewee", fields: [revieweeId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, reviewerId, revieweeId])
+  @@index([revieweeId, status])
+  @@map("reviews")
+}
+
+model Report {
+  id               String       @id @default(uuid()) @db.Uuid
+  reporterId       String       @map("reporter_id") @db.Uuid
+  reportedUserId   String?      @map("reported_user_id") @db.Uuid
+  bookingId        String?      @map("booking_id") @db.Uuid
+  category         String       @db.VarChar(64)
+  evidenceReference String?     @map("evidence_reference") @db.VarChar(512)
+  status           ReportStatus @default(OPEN)
+  outcome          String?      @db.VarChar(240)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  reporter     User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  reportedUser User?    @relation("ReportReportedUser", fields: [reportedUserId], references: [id], onDelete: Restrict)
+  booking      Booking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([reportedUserId])
+  @@map("reports")
+}
+
+model SupportTicket {
+  id           String       @id @default(uuid()) @db.Uuid
+  requesterId  String       @map("requester_id") @db.Uuid
+  bookingId    String?      @map("booking_id") @db.Uuid
+  category     String       @db.VarChar(64)
+  status       TicketStatus @default(OPEN)
+  assignedToId String?      @map("assigned_to_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requester  User     @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  assignee   User?    @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  booking    Booking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([requesterId])
+  @@map("support_tickets")
+}
+
+/// Append-only. Sensitive admin reads and consequential actions are recorded.
+model AuditLog {
+  id           String       @id @default(uuid()) @db.Uuid
+  actorUserId  String?      @map("actor_user_id") @db.Uuid
+  action       String       @db.VarChar(80)
+  resourceType String       @map("resource_type") @db.VarChar(80)
+  resourceId   String       @map("resource_id") @db.VarChar(128)
+  requestId    String       @map("request_id") @db.VarChar(128)
+  outcome      AuditOutcome
+  reason       String?      @db.VarChar(160)
+  metadata     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id            String      @id @default(uuid()) @db.Uuid
+  eventType     String      @map("event_type") @db.VarChar(80)
+  aggregateId   String      @map("aggregate_id") @db.VarChar(128)
+  payload       Json        @default("{}")
+  state         OutboxState @default(PENDING)
+  retryCount    Int         @default(0) @map("retry_count")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([state, createdAt])
+  @@map("outbox_events")
+}

@@ -33,6 +33,35 @@ test("loadEnv reports variable names and omits values", () => {
   );
 });
 
+test("loadEnv defaults authentication to unconfigured", () => {
+  const env = loadEnv({
+    NODE_ENV: "test",
+    DATABASE_URL:
+      "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+  });
+  assert.equal(env.AUTH_MODE, "unconfigured");
+  assert.equal(env.DIRECT_URL, undefined);
+});
+
+test("loadEnv rejects an unknown authentication mode without echoing it", () => {
+  const secret = "trust-client-roles";
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "test",
+        AUTH_MODE: secret,
+        DATABASE_URL:
+          "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /AUTH_MODE/);
+      assert.equal(error.message.includes(secret), false);
+      return true;
+    },
+  );
+});
+
 test("loadEnv rejects a port outside the valid range", () => {
   assert.throws(
     () =>
