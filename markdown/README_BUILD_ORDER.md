@@ -14,7 +14,7 @@ what it changed and which tests it ran.
 ## Recommended repository layout
 
 ``` text
-local-traveler-india/
+mittiandmiles/
 ├── AGENTS.md
 ├── PROJECT_CONTEXT.md
 ├── README_BUILD_ORDER.md
@@ -45,7 +45,7 @@ The MVP contains no public website and no separate admin website. The Flutter ap
 
 ## First setup in Cursor
 
-1.  Create an empty Git repository named `local-traveler-india`.
+1.  Create an empty Git repository named `mittiandmiles`.
 2.  Open the repository root in Cursor.
 3.  Copy all supplied Markdown files into the root and `docs/` paths
     shown above.
