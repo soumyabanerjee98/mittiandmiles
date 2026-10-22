@@ -1,6 +1,6 @@
 # Mitti and Miles
 
-Multi-city marketplace for local experiences in India. This repository is at Phase 2: the API has a Prisma domain schema, validation, an authentication seam, role permissions, and audit logging. Bookings and payment capture are not implemented.
+Multi-city marketplace for local experiences in India. The API has a Prisma domain schema, validation, **JWT authentication** (access + refresh tokens), server-side role permissions, audit logging, and Phase 3 discovery/host catalogue endpoints. Bookings and payment capture are not implemented.
 
 Product and engineering rules live in `markdown/`. Start with `markdown/AGENTS.md`, `markdown/PROJECT_CONTEXT.md`, and `markdown/docs/07_IMPLEMENTATION_PLAN.md`.
 
@@ -9,7 +9,7 @@ Product and engineering rules live in `markdown/`. Start with `markdown/AGENTS.m
 ```text
 apps/api/                 Node.js, Express, TypeScript. Run this app on its own.
 apps/mobile/              Flutter app (traveller, host, protected admin area)
-packages/api-contracts/   OpenAPI (health and account seam)
+packages/api-contracts/   OpenAPI (health, auth, account, catalogue)
 markdown/                 Product and engineering documents
 ```
 
@@ -33,7 +33,7 @@ npm ci
 cp .env.example .env
 ```
 
-Put the Supabase Postgres URIs in `DATABASE_URL` and `DIRECT_URL`, then apply the schema and optional development identities:
+Copy `apps/api/.env.example` to `.env`, set Supabase `DATABASE_URL` and `DIRECT_URL`, and configure auth (see `.env.example`). Then apply migrations and optional development identities:
 
 ```bash
 npx prisma migrate deploy
@@ -41,9 +41,25 @@ npm run db:seed
 npm run dev
 ```
 
-`db:seed` runs only when `NODE_ENV=development`. It inserts fake `@example.com` accounts and no documents or payment data. A local token looks like `Authorization: Bearer dev:development:dev-traveller`. `AUTH_MODE=unconfigured` rejects every token. That is the safe setting until an identity provider is chosen.
+### Authentication
 
-`GET /api/v1/me` returns the account stored for that subject. Roles in a header or body are ignored.
+Production-style login uses **JWT** (HS256 via the `jose` library):
+
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` return `accessToken`, `refreshToken`, `tokenType` (`Bearer`), and `expiresIn`.
+- Send `Authorization: Bearer <accessToken>` on protected routes.
+- `POST /api/v1/auth/refresh` rotates the refresh token; `POST /api/v1/auth/logout` revokes it.
+- Access tokens carry only the user id (`sub`). **Roles are never taken from the JWT**; the server loads them from the database on each request.
+
+Set `AUTH_MODE=jwt` and `JWT_SECRET` (at least 32 characters) in `.env`. Other `JWT_*` variables are documented in `.env.example`.
+
+For local work without registering:
+
+- `AUTH_MODE=development` accepts seeded dev tokens: `Authorization: Bearer dev:development:dev-traveller` (after `npm run db:seed`).
+- With `JWT_SECRET` set, `AUTH_MODE=development` also accepts JWTs from register/login.
+
+`db:seed` runs only when `NODE_ENV=development`. It inserts fake `@example.com` accounts (no passwords, no documents, no payment data).
+
+`GET /api/v1/me` returns the account for the authenticated user. Roles in a header or body are ignored.
 
 On Windows PowerShell:
 
@@ -93,8 +109,9 @@ Constraint tests run when `TEST_DATABASE_URL` is set. They insert rows inside tr
 
 ## Dependencies added for Phase 2
 
-- `@prisma/client` — PostgreSQL access for accounts, permissions, and audit rows
+- `@prisma/client` — PostgreSQL access for accounts, permissions, audit rows, and refresh sessions
 - `prisma` (development) — schema, migrations, and the development seed
+- `jose` — sign and verify JWT access tokens
 
 The API stays one Express process. Prisma does not add a local database.
 

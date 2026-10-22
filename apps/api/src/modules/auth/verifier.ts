@@ -1,15 +1,16 @@
 /**
- * Authentication integration seam.
+ * Verifies bearer credentials. Roles are never read from the token payload
+ * beyond the user id (JWT `sub`). Account permissions are loaded from the DB.
  *
- * The identity provider is not selected. This module verifies a bearer
- * token and returns the provider subject. It does not issue tokens,
- * register accounts, or accept a role from the client.
- *
- * `development` accepts only `Bearer dev:<provider>:<subject>` so local
- * and test callers can name a subject. `unconfigured` rejects every
- * token. There is no mode that trusts a client-supplied role.
+ * - `development`: `Bearer dev:<provider>:<subject>` for seeded local users.
+ * - `jwt`: HS256 access JWTs when `JwtService` is configured.
+ * - In `development`, JWTs are also accepted when `JwtService` is configured.
  */
-export type AuthMode = "development" | "unconfigured";
+import { JWT_PROVIDER } from "./constants.js";
+import type { JwtService } from "./jwt-service.js";
+import { verifiedIdentityFromAccess } from "./jwt-service.js";
+
+export type AuthMode = "development" | "jwt";
 
 export type VerifiedIdentity = {
   provider: string;
@@ -22,28 +23,60 @@ export type AuthVerifier = {
   ): Promise<VerifiedIdentity | null>;
 };
 
+export type AuthVerifierConfig = {
+  mode: AuthMode;
+  jwt: JwtService | null;
+};
+
 const developmentToken = /^dev:([a-z0-9_-]{1,64}):([A-Za-z0-9._-]{1,128})$/;
 
-export function createAuthVerifier(mode: AuthMode): AuthVerifier {
+export function createAuthVerifier(config: AuthVerifierConfig): AuthVerifier {
   return {
-    verify(authorizationHeader: string | undefined) {
-      return Promise.resolve(verifyHeader(mode, authorizationHeader));
+    async verify(authorizationHeader: string | undefined) {
+      const bearer = readBearerToken(authorizationHeader);
+      if (bearer === null) {
+        return null;
+      }
+
+      if (config.mode === "development") {
+        const dev = parseDevelopmentToken(bearer);
+        if (dev !== null) {
+          return dev;
+        }
+      }
+
+      if (config.jwt !== null) {
+        const claims = await config.jwt.verifyAccessToken(bearer);
+        if (claims !== null) {
+          return verifiedIdentityFromAccess(claims);
+        }
+      }
+
+      if (config.mode === "jwt" && config.jwt === null) {
+        return null;
+      }
+
+      return null;
     },
   };
 }
 
-function verifyHeader(
-  mode: AuthMode,
+function readBearerToken(
   authorizationHeader: string | undefined,
-): VerifiedIdentity | null {
-  if (mode !== "development" || authorizationHeader === undefined) {
+): string | null {
+  if (authorizationHeader === undefined) {
     return null;
   }
   const prefix = "Bearer ";
   if (!authorizationHeader.startsWith(prefix)) {
     return null;
   }
-  const match = developmentToken.exec(authorizationHeader.slice(prefix.length));
+  const token = authorizationHeader.slice(prefix.length).trim();
+  return token.length > 0 ? token : null;
+}
+
+function parseDevelopmentToken(token: string): VerifiedIdentity | null {
+  const match = developmentToken.exec(token);
   if (match === null) {
     return null;
   }
@@ -54,3 +87,5 @@ function verifyHeader(
   }
   return { provider, subject };
 }
+
+export { JWT_PROVIDER };

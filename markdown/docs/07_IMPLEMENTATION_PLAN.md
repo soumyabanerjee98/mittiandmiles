@@ -33,8 +33,9 @@ business/payment features yet.
 
 Deliver: - Prisma schema and initial migrations; - migration scripts and
 seed scripts with development-only fake data; - validation/error
-middleware; - authentication integration boundary; - RBAC; - audit
-logging; - test database configuration.
+middleware; - JWT access and refresh tokens, register/login/refresh/logout,
+and a development bearer-token seam; - RBAC; - audit logging; - test
+database configuration.
 
 Exit criteria: - migration works from an empty database; -
 ownership/permission tests pass; - no real secrets or personal data in

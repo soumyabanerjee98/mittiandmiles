@@ -30,3 +30,25 @@ test("the initial migration contains the domain integrity rules", () => {
   assert.equal(migrationSql.includes("@example.com"), false);
   assert.equal(migrationSql.toLowerCase().includes("password"), false);
 });
+
+test("the catalogue migration adds reference data without document bytes", () => {
+  const catalogueSql = readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../prisma/migrations/20261022210000_catalogue/migration.sql",
+    ),
+    "utf8",
+  );
+  for (const snippet of [
+    "NEEDS_INFORMATION",
+    'CREATE TABLE "languages"',
+    'CREATE TABLE "categories"',
+    'CREATE TABLE "experience_blackouts"',
+    "experiences_category_fkey",
+    "cancellation_policy",
+  ]) {
+    assert.equal(catalogueSql.includes(snippet), true, snippet);
+  }
+  assert.equal(catalogueSql.toLowerCase().includes("bytea"), false);
+  assert.equal(catalogueSql.includes("@example.com"), false);
+});

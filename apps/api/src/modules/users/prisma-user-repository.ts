@@ -17,7 +17,7 @@ type UserRow = {
 };
 
 export class PrismaUserRepository implements UserRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(protected readonly prisma: PrismaClient) {}
 
   async findByAuthSubject(
     provider: string,
@@ -32,7 +32,7 @@ export class PrismaUserRepository implements UserRepository {
       },
       include: { roles: true },
     });
-    return user === null ? null : toRecord(user);
+    return user === null ? null : mapPrismaUserToRecord(user);
   }
 
   async findById(id: string): Promise<UserRecord | null> {
@@ -40,7 +40,7 @@ export class PrismaUserRepository implements UserRepository {
       where: { id },
       include: { roles: true },
     });
-    return user === null ? null : toRecord(user);
+    return user === null ? null : mapPrismaUserToRecord(user);
   }
 
   async updateLocale(id: string, locale: string): Promise<UserRecord | null> {
@@ -50,7 +50,7 @@ export class PrismaUserRepository implements UserRepository {
         data: { locale },
         include: { roles: true },
       });
-      return toRecord(user);
+      return mapPrismaUserToRecord(user);
     } catch (error: unknown) {
       if (isNotFound(error)) {
         return null;
@@ -60,7 +60,7 @@ export class PrismaUserRepository implements UserRepository {
   }
 }
 
-function toRecord(user: UserRow): UserRecord {
+export function mapPrismaUserToRecord(user: UserRow): UserRecord {
   if (!isAccountStatus(user.accountStatus)) {
     throw new Error("Stored account status is not supported.");
   }

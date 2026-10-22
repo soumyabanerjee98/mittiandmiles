@@ -40,6 +40,7 @@ enum HostVerificationStatus {
   VERIFIED
   REJECTED
   EXPIRED
+  NEEDS_INFORMATION
 }
 
 enum HostOnboardingStatus {
@@ -254,10 +255,12 @@ model User {
   authSubject   String        @map("auth_subject") @db.VarChar(128)
   accountStatus AccountStatus @default(ACTIVE) @map("account_status")
   locale        String        @default("en") @db.VarChar(35)
+  passwordHash  String?       @map("password_hash") @db.VarChar(255)
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   travellerProfile  TravellerProfile?
+  refreshSessions   AuthRefreshSession[]
   hostProfile       HostProfile?
   roles             UserRole[]
   tripRequests      TripRequest[]      @relation("TripRequestTraveller")
@@ -277,6 +280,22 @@ model User {
   @@unique([authProvider, authSubject])
   @@index([accountStatus])
   @@map("users")
+}
+
+/// Opaque refresh tokens are stored hashed. Revocation sets revoked_at.
+model AuthRefreshSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_refresh_sessions")
 }
 
 model TravellerProfile {
@@ -302,6 +321,7 @@ model HostProfile {
   onboardingStatus        HostOnboardingStatus   @default(NOT_STARTED) @map("onboarding_status")
   payoutProviderReference String?                @map("payout_provider_reference") @db.VarChar(128)
   publicProfileStatus     PublicProfileStatus    @default(HIDDEN) @map("public_profile_status")
+  verificationNote        String?                @map("verification_note") @db.VarChar(160)
   createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -371,6 +391,30 @@ model City {
   @@map("cities")
 }
 
+/// Reference data. Adding a language is a row, not a code change.
+model Language {
+  code      String   @id @db.VarChar(16)
+  name      String   @db.VarChar(80)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  experiences ExperienceLanguage[]
+
+  @@map("languages")
+}
+
+/// Reference data. Adding a category is a row, not a code change.
+model Category {
+  slug      String   @id @db.VarChar(80)
+  name      String   @db.VarChar(120)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  experiences Experience[]
+
+  @@map("categories")
+}
+
 model Experience {
   id                 String        @id @default(uuid()) @db.Uuid
   hostId             String        @map("host_id") @db.Uuid
@@ -388,15 +432,19 @@ model Experience {
   meetingArea        String        @map("meeting_area") @db.VarChar(240)
   accessibilityNotes String        @default("") @map("accessibility_notes") @db.Text
   safetyNotes        String        @default("") @map("safety_notes") @db.Text
+  cancellationPolicy String        @default("") @map("cancellation_policy") @db.Text
+  moderationNote     String?       @map("moderation_note") @db.VarChar(160)
   createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  host      HostProfile          @relation(fields: [hostId], references: [id], onDelete: Restrict)
-  city      City                 @relation(fields: [cityId], references: [id], onDelete: Restrict)
-  languages ExperienceLanguage[]
-  images    ExperienceImage[]
-  slots     ExperienceSlot[]
-  bookings  Booking[]
+  host         HostProfile          @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  city         City                 @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  categoryRef  Category             @relation(fields: [category], references: [slug], onDelete: Restrict)
+  languages    ExperienceLanguage[]
+  images       ExperienceImage[]
+  slots        ExperienceSlot[]
+  blackouts    ExperienceBlackout[]
+  bookings     Booking[]
 
   @@index([hostId])
   @@index([cityId, listingStatus])
@@ -408,6 +456,7 @@ model ExperienceLanguage {
   languageCode String @map("language_code") @db.VarChar(16)
 
   experience Experience @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+  language   Language   @relation(fields: [languageCode], references: [code], onDelete: Restrict)
 
   @@id([experienceId, languageCode])
   @@map("experience_languages")
@@ -442,6 +491,19 @@ model ExperienceSlot {
 
   @@index([experienceId, startsAt])
   @@map("experience_slots")
+}
+
+model ExperienceBlackout {
+  id           String   @id @default(uuid()) @db.Uuid
+  experienceId String   @map("experience_id") @db.Uuid
+  startsAt     DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt       DateTime @map("ends_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Restrict)
+
+  @@index([experienceId, startsAt])
+  @@map("experience_blackouts")
 }
 
 model SlotReservation {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mitti and Miles API. Phase 2 domain foundation. No payment capture.",
+  "description": "Mitti and Miles API. Phase 3 catalogue and host onboarding. No booking or payment capture.",
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch --env-file=.env src/server.ts",
@@ -23,6 +23,7 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "express": "^5.3.0",
+    "jose": "^6.2.13",
     "pino": "^10.4.0",
     "zod": "^4.6.7"
   },

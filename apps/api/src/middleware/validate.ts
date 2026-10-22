@@ -26,12 +26,28 @@ export function validateParams<T>(schema: ZodType<T>): RequestHandler {
   };
 }
 
+export function validateQuery<T>(schema: ZodType<T>): RequestHandler {
+  return (req, res, next) => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      next(validationError(parsed.error.issues));
+      return;
+    }
+    res.locals.parsedQuery = parsed.data;
+    next();
+  };
+}
+
 export function readParsedBody<T>(res: Response, schema: ZodType<T>): T {
   return readParsed(res.locals.parsedBody, schema);
 }
 
 export function readParsedParams<T>(res: Response, schema: ZodType<T>): T {
   return readParsed(res.locals.parsedParams, schema);
+}
+
+export function readParsedQuery<T>(res: Response, schema: ZodType<T>): T {
+  return readParsed(res.locals.parsedQuery, schema);
 }
 
 function readParsed<T>(value: unknown, schema: ZodType<T>): T {
