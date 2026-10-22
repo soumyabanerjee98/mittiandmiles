@@ -22,8 +22,8 @@ listed; - product decisions explicitly marked confirmed or unresolved.
 
 Deliver: - API skeleton with startup environment validation and
 `/health`; - Flutter mobile skeleton with traveller, host and protected admin feature-module scaffolding; -
-formatting, lint, type checks and CI; - `.env.example` only; -
-Docker/local PostgreSQL setup for development if appropriate; - logging
+formatting, lint, type checks and CI; - `.env.example` only, with a
+Supabase Postgres connection string; - no local Docker database; - logging
 and request IDs.
 
 Exit criteria: - fresh clone setup documented; - CI passes; - no
