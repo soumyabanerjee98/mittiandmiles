@@ -98,3 +98,78 @@ export function assertDevelopmentSeed(nodeEnv: string | undefined): void {
     throw new Error("Refusing to seed: NODE_ENV must be development.");
   }
 }
+
+/**
+ * Development-only catalogue. Nothing here is a verified host, a published
+ * listing, or evidence that a city is approved for production.
+ */
+export const developmentCatalogue = {
+  marker: "development-only" as const,
+  languages: [
+    {
+      code: "en",
+      name: "English",
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      code: "hi",
+      name: "Hindi",
+      active: true,
+      createdAt: "2026-01-01T00:00:01.000Z",
+    },
+  ],
+  categories: [
+    {
+      slug: "dev-walk",
+      name: "Dev Walk",
+      active: true,
+      createdAt: "2026-01-01T00:00:02.000Z",
+    },
+  ],
+  cities: [
+    {
+      id: "10000000-0000-4000-8000-000000000001",
+      slug: "dev-city",
+      name: "Dev City",
+      state: "Dev State",
+      countryCode: "IN",
+      timezone: "Asia/Kolkata",
+      status: "ACTIVE" as const,
+      createdAt: "2026-01-01T00:00:03.000Z",
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      slug: "dev-city-inactive",
+      name: "Dev City Inactive",
+      state: "Dev State",
+      countryCode: "IN",
+      timezone: "Asia/Kolkata",
+      status: "INACTIVE" as const,
+      createdAt: "2026-01-01T00:00:04.000Z",
+    },
+  ],
+  experiences: [
+    {
+      id: "10000000-0000-4000-8000-000000000010",
+      hostId: "22222222-2222-4222-8222-222222222223",
+      cityId: "10000000-0000-4000-8000-000000000001",
+      category: "dev-walk",
+      title: "Dev Walk Draft",
+      description: "Development-only draft listing.",
+      durationMinutes: 120,
+      basePriceMinor: 150000,
+      currency: "INR",
+      capacity: 4,
+      listingStatus: "DRAFT" as const,
+      inclusions: "Development-only notes",
+      exclusions: "",
+      meetingArea: "Dev meeting area",
+      accessibilityNotes: "",
+      safetyNotes: "",
+      cancellationPolicy: "Development-only policy. No booking is offered.",
+      languageCodes: ["en"],
+      createdAt: "2026-01-01T00:00:05.000Z",
+    },
+  ],
+};

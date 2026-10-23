@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertDevelopmentSeed,
+  developmentCatalogue,
   developmentUsers,
 } from "../prisma/development-fixtures.js";
 
@@ -33,4 +34,20 @@ test("seed refuses every environment except development", () => {
       assertDevelopmentSeed(nodeEnv);
     }, /NODE_ENV must be development/);
   }
+});
+
+test("catalogue fixtures are development-only drafts", () => {
+  assert.equal(developmentCatalogue.marker, "development-only");
+  for (const city of developmentCatalogue.cities) {
+    assert.equal(city.name.startsWith("Dev "), true);
+    assert.equal(city.slug.startsWith("dev-"), true);
+  }
+  for (const experience of developmentCatalogue.experiences) {
+    assert.equal(experience.listingStatus, "DRAFT");
+    assert.equal(experience.title.startsWith("Dev "), true);
+  }
+  const serialized = JSON.stringify(developmentCatalogue);
+  assert.equal(serialized.includes("VERIFIED"), false);
+  assert.equal(serialized.includes("PUBLISHED"), false);
+  assert.equal(serialized.includes("password"), false);
 });

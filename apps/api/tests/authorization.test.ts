@@ -6,6 +6,7 @@ import {
   MemoryAuditWriter,
   FailingAuditWriter,
 } from "../src/modules/audit/memory-audit-writer.js";
+import type { AuditWriter } from "../src/modules/audit/audit-writer.js";
 import { createAuthVerifier } from "../src/modules/auth/verifier.js";
 import { MemoryUserRepository } from "../src/modules/users/memory-user-repository.js";
 import type { UserRecord } from "../src/modules/users/user-repository.js";
@@ -60,13 +61,14 @@ function token(subject: string): string {
 }
 
 function createTestApp(
-  audit = new MemoryAuditWriter(),
-  mode: "development" | "unconfigured" = "development",
+  audit: AuditWriter = new MemoryAuditWriter(),
+  mode: "development" | "jwt" = "development",
 ) {
   return createApp(createLogger("silent"), {
-    verifier: createAuthVerifier(mode),
+    verifier: createAuthVerifier({ mode, jwt: null }),
     users: new MemoryUserRepository(users),
     audit,
+    auth: null,
   });
 }
 
@@ -129,10 +131,8 @@ test("missing and client-supplied credentials do not authenticate", async () => 
   assert.equal(readError(response.body).code, "UNAUTHENTICATED");
 });
 
-test("development tokens are rejected when auth is unconfigured", async () => {
-  const response = await request(
-    createTestApp(new MemoryAuditWriter(), "unconfigured"),
-  )
+test("development tokens are rejected when only jwt mode is enabled", async () => {
+  const response = await request(createTestApp(new MemoryAuditWriter(), "jwt"))
     .get("/api/v1/me")
     .set("Authorization", token("dev-traveller"));
 

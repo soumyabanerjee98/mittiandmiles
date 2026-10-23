@@ -11,12 +11,19 @@ Use OWASP API Security Top 10 as a baseline.
 
 ### Authentication
 
--   Use a maintained identity provider or a carefully reviewed
-    implementation.
+-   **Current API (MVP):** local email/password with server-issued HS256
+    JWT access tokens and opaque refresh tokens (hash stored in
+    PostgreSQL; rotation on refresh). Access tokens must not embed roles
+    or permissions; the server loads grants from the database every
+    request. Configure `JWT_SECRET` only via environment/secrets manager
+    (never commit). Development may use non-JWT `Bearer dev:...` tokens
+    for seeded users when `AUTH_MODE=development`.
+-   Future: external identity provider, OTP/SMS, or passkeys — use a
+    maintained provider or a carefully reviewed implementation.
 -   Protect OTP delivery and verification from brute force and cost
-    abuse.
--   Use secure token/session storage and rotation/revocation.
--   Provide account recovery, logout and session management.
+    abuse when added.
+-   Use secure token storage on clients, rotation/revocation on the
+    server, logout, and (when built) account recovery.
 -   Require stronger controls for privileged finance/admin actions.
 
 ### Authorization

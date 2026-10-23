@@ -6,6 +6,12 @@ import {
   createAuthVerifier,
   type AuthVerifier,
 } from "./modules/auth/verifier.js";
+import { createAuthRouter } from "./modules/auth/auth-routes.js";
+import type { AuthService } from "./modules/auth/auth-service.js";
+import { UnconfiguredPrivateStorage } from "./modules/catalogue/document-storage.js";
+import { MemoryCatalogueStore } from "./modules/catalogue/memory-store.js";
+import { createCatalogueRouter } from "./modules/catalogue/routes.js";
+import { CatalogueService } from "./modules/catalogue/service.js";
 import { createAccountRouter } from "./modules/users/account-routes.js";
 import { MemoryUserRepository } from "./modules/users/memory-user-repository.js";
 import type { UserRepository } from "./modules/users/user-repository.js";
@@ -16,6 +22,8 @@ export type AppDependencies = {
   verifier: AuthVerifier;
   users: UserRepository;
   audit: AuditWriter;
+  auth: AuthService | null;
+  catalogue?: CatalogueService;
 };
 
 export function createApp(
@@ -34,7 +42,25 @@ export function createApp(
     });
   });
 
+  const catalogue =
+    deps.catalogue ??
+    new CatalogueService(
+      new MemoryCatalogueStore(),
+      new UnconfiguredPrivateStorage(),
+    );
   app.use("/api/v1", createAccountRouter(deps));
+  app.use(
+    "/api/v1",
+    createCatalogueRouter({
+      verifier: deps.verifier,
+      users: deps.users,
+      audit: deps.audit,
+      catalogue,
+    }),
+  );
+  if (deps.auth !== null) {
+    app.use("/api/v1", createAuthRouter(deps.auth));
+  }
 
   app.use((_req, res) => {
     res.status(404).json({
@@ -52,8 +78,9 @@ export function createApp(
 
 function unconfiguredDependencies(): AppDependencies {
   return {
-    verifier: createAuthVerifier("unconfigured"),
+    verifier: createAuthVerifier({ mode: "development", jwt: null }),
     users: new MemoryUserRepository([]),
     audit: new MemoryAuditWriter(),
+    auth: null,
   };
 }

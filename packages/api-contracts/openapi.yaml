@@ -1,13 +1,16 @@
 openapi: 3.0.3
 info:
   title: Mitti and Miles API
-  version: 0.2.0
+  version: 0.3.0
   description: >
-    Phase 2 contract. Health, the authenticated account seam, and the error
-    envelope are implemented. Register, login, bookings, and payment capture
-    are not. The identity provider is not selected. Development tokens are
-    `Bearer dev:<provider>:<subject>` and are accepted only when the API
-    process is in development authentication mode.
+    Phase 3 contract. Discovery, host onboarding, listing review, and the
+    Phase 2 account seam are implemented. Bookings and payment capture are
+    not. Object storage is not configured: document and image responses never
+    include bytes or a download URL. The identity provider for production is
+    JWT when configured. Development tokens are `Bearer dev:<provider>:<subject>`
+    and are accepted only when the API process is in development authentication
+    mode. A listing is bookable only when it is published, its host is verified
+    and publicly visible, and its city is active. Search never widens that rule.
 servers:
   - url: http://localhost:3000
     description: Local development
@@ -101,14 +104,308 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /api/v1/cities:
+    get:
+      operationId: listCities
+      summary: Active cities
+      description: Inactive cities are omitted. Adding a city is an admin data change.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Page of active cities.
+  /api/v1/languages:
+    get:
+      operationId: listLanguages
+      summary: Active languages
+      responses:
+        "200":
+          description: Page of active languages.
+  /api/v1/categories:
+    get:
+      operationId: listCategories
+      summary: Active experience categories
+      responses:
+        "200":
+          description: Page of active categories.
+  /api/v1/experiences:
+    get:
+      operationId: listExperiences
+      summary: Discover published listings
+      description: >
+        Returns published listings whose host is verified and publicly visible
+        and whose city is active. verifiedHost=false does not reveal other listings.
+        A date is interpreted in the city time zone.
+      parameters:
+        - name: city
+          in: query
+          schema: { type: string }
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: language
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: integer }
+        - name: maxPrice
+          in: query
+          schema: { type: integer }
+        - name: minDuration
+          in: query
+          schema: { type: integer }
+        - name: maxDuration
+          in: query
+          schema: { type: integer }
+        - name: partySize
+          in: query
+          schema: { type: integer }
+        - name: verifiedHost
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Page of bookable listings. Contact details are omitted.
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/experiences/{id}:
+    get:
+      operationId: getExperience
+      summary: Public listing detail
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Bookable listing. Unpublished listings are not found.
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/experiences/{id}/availability:
+    get:
+      operationId: getExperienceAvailability
+      summary: Open slots for a bookable listing
+      description: Remaining held seats are applied when bookings exist. This phase stores open capacity only.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Open slots inside the date range.
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/{id}:
+    get:
+      operationId: getPublicHost
+      summary: Public host profile
+      description: Only a verified, visible host. No email, phone, documents, or payout data.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Public profile.
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/onboarding:
+    post:
+      operationId: submitHostOnboarding
+      summary: Create or update the signed-in host profile
+      description: Requires the HOST role. Cannot set verification or payout fields.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Verification state after the update.
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/me/verification:
+    get:
+      operationId: getOwnVerification
+      summary: Signed-in host verification state
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Status, note, and document metadata. Storage references are omitted.
+  /api/v1/hosts/me/documents:
+    post:
+      operationId: allocateHostDocument
+      summary: Allocate a private identity-document reference
+      description: Does not accept file bytes. Upload is unavailable until object storage is configured.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Document metadata and an unavailable upload.
+  /api/v1/hosts/me/experiences:
+    post:
+      operationId: createExperience
+      summary: Create a draft listing owned by the signed-in host
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Draft listing. listingStatus cannot be supplied by the client.
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/me/experiences/{id}:
+    patch:
+      operationId: updateExperience
+      summary: Edit an owned draft or rejected listing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Updated listing.
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/me/experiences/{id}/submit:
+    post:
+      operationId: submitExperience
+      summary: Send an owned listing for review
+      description: Requires a verified host and an active city. Does not publish.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Listing is in review.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/me/experiences/{id}/availability:
+    put:
+      operationId: replaceAvailability
+      summary: Replace slots and blackout periods for an owned listing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Replacement schedule. Slot length must match the listing duration.
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/cities:
+    post:
+      operationId: createCity
+      summary: Add an inactive city
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Inactive city. Activation is a separate audited action.
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/cities/{id}/activation:
+    post:
+      operationId: setCityActivation
+      summary: Activate or deactivate a city
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Updated city. A change is audited with the supplied reason.
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/hosts/{hostId}/verification:
+    post:
+      operationId: decideHostVerification
+      summary: Approve, reject, or request more host information
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated verification state. A change is audited.
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/hosts/{hostId}/documents:
+    get:
+      operationId: reviewHostDocuments
+      summary: Read private document metadata
+      description: Returns an unconfigured access descriptor. No document bytes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Audited document metadata.
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/experiences/{id}/moderation:
+    post:
+      operationId: moderateExperience
+      summary: Publish, reject, unpublish, or archive a listing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Updated listing. Publish still requires a bookable host and active city.
+        "403":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       description: >
-        Development seam only. Production authentication is unconfigured
-        until an identity provider is selected.
+        Development tokens are accepted only in development authentication mode.
+        JWT access tokens are accepted when JWT authentication is configured.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
   responses:
     Error:
       description: Safe error envelope. No stack trace or provider payload.

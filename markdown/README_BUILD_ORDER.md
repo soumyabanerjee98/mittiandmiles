@@ -81,10 +81,10 @@ The MVP contains no public website and no separate admin website. The Flutter ap
 
 > Implement only Phase 2. Follow `AGENTS.md`, the database/domain model
 > and API contract. Add Prisma schema and migrations for the approved
-> scope, validation, structured errors, authentication integration
-> seams, RBAC and audit logging. Do not store secrets or real identity
-> documents in the repository. Add migration and authorization tests. Do
-> not implement payment capture yet.
+> scope, validation, structured errors, JWT access/refresh with
+> register/login, a development bearer-token seam, RBAC and audit logging.
+> Do not store secrets or real identity documents in the repository. Add
+> migration and authorization tests. Do not implement payment capture yet.
 
 ### Prompt 3 --- Discovery and host onboarding
 

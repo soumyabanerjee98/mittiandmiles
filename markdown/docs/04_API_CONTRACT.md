@@ -34,17 +34,46 @@ Do not expose stack traces or internal provider payloads to clients.
 
 ## 3. Auth and account
 
--   `POST /auth/register`
--   `POST /auth/login`
--   `POST /auth/refresh`
--   `POST /auth/logout`
+Implemented (JWT):
+
+-   `POST /auth/register` — email, password, optional locale; returns
+    access and refresh tokens.
+-   `POST /auth/login` — email and password; returns tokens.
+-   `POST /auth/refresh` — body `{ "refreshToken" }`; rotates refresh
+    token and returns a new pair.
+-   `POST /auth/logout` — body `{ "refreshToken" }`; revokes the session
+    (`204`).
+
+Account (Bearer access JWT):
+
 -   `GET /me`
--   `PATCH /me`
+-   `PATCH /me` — locale only; rejects role and status fields.
+-   `GET /users/:userId` — self or staff `user.read` (staff reads are
+    audited).
+
+Not implemented yet on this contract:
+
 -   `POST /hosts/onboarding`
 -   `GET /hosts/me/verification`
 
-Authentication mechanism is an implementation decision to confirm. Use
-secure sessions/tokens, revocation and account recovery protections.
+### Authentication rules (implemented)
+
+-   **Access token:** HS256 JWT. Claims include `sub` (user id) and
+    `typ: "access"`. Do **not** put roles, admin flags, or permissions in
+    the token.
+-   **Refresh token:** opaque value; only a hash is stored server-side.
+    Rotation on refresh; logout revokes the session.
+-   **Passwords:** stored as scrypt hashes; never returned in API
+    responses.
+-   **Development:** when `AUTH_MODE=development`, the API also accepts
+    `Bearer dev:<provider>:<subject>` for seeded users (not a production
+    mechanism). With `JWT_SECRET` set, JWT and dev tokens can both work
+    in development.
+-   **Production:** use `AUTH_MODE=jwt` and a strong `JWT_SECRET` (see
+    `apps/api/.env.example`).
+
+Account recovery, OTP, and external identity providers are not implemented
+yet. Admin roles are not self-assigned through register.
 
 ## 4. Discovery
 

@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import { HttpError } from "../../shared/http-error.js";
 import { asyncMiddleware } from "../../middleware/async-handler.js";
 import { actorFromGrants } from "./actor.js";
+import { JWT_PROVIDER } from "./constants.js";
 import type { AuthVerifier } from "./verifier.js";
 import type { UserRepository } from "../users/user-repository.js";
 
@@ -14,10 +15,10 @@ export function createAuthenticate(
     if (identity === null) {
       throw new HttpError(401, "UNAUTHENTICATED", "Authentication required.");
     }
-    const user = await users.findByAuthSubject(
-      identity.provider,
-      identity.subject,
-    );
+    const user =
+      identity.provider === JWT_PROVIDER
+        ? await users.findById(identity.subject)
+        : await users.findByAuthSubject(identity.provider, identity.subject);
     if (user === null || user.accountStatus !== "ACTIVE") {
       if (user !== null && user.accountStatus !== "ACTIVE") {
         throw new HttpError(

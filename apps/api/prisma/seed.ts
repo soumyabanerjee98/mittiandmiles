@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
   assertDevelopmentSeed,
+  developmentCatalogue,
   developmentUsers,
 } from "./development-fixtures.js";
 
@@ -66,6 +67,97 @@ async function main(): Promise<void> {
             },
           });
         }
+      }
+
+      for (const language of developmentCatalogue.languages) {
+        await tx.language.upsert({
+          where: { code: language.code },
+          create: {
+            code: language.code,
+            name: language.name,
+            active: language.active,
+            createdAt: new Date(language.createdAt),
+          },
+          update: { name: language.name, active: language.active },
+        });
+      }
+      for (const category of developmentCatalogue.categories) {
+        await tx.category.upsert({
+          where: { slug: category.slug },
+          create: {
+            slug: category.slug,
+            name: category.name,
+            active: category.active,
+            createdAt: new Date(category.createdAt),
+          },
+          update: { name: category.name, active: category.active },
+        });
+      }
+      for (const city of developmentCatalogue.cities) {
+        await tx.city.upsert({
+          where: { id: city.id },
+          create: {
+            id: city.id,
+            slug: city.slug,
+            name: city.name,
+            state: city.state,
+            countryCode: city.countryCode,
+            timezone: city.timezone,
+            status: city.status,
+            createdAt: new Date(city.createdAt),
+          },
+          update: {
+            slug: city.slug,
+            name: city.name,
+            state: city.state,
+            countryCode: city.countryCode,
+            timezone: city.timezone,
+            status: city.status,
+          },
+        });
+      }
+      for (const experience of developmentCatalogue.experiences) {
+        const data = {
+          hostId: experience.hostId,
+          cityId: experience.cityId,
+          category: experience.category,
+          title: experience.title,
+          description: experience.description,
+          durationMinutes: experience.durationMinutes,
+          basePriceMinor: experience.basePriceMinor,
+          currency: experience.currency,
+          capacity: experience.capacity,
+          listingStatus: experience.listingStatus,
+          inclusions: experience.inclusions,
+          exclusions: experience.exclusions,
+          meetingArea: experience.meetingArea,
+          accessibilityNotes: experience.accessibilityNotes,
+          safetyNotes: experience.safetyNotes,
+          cancellationPolicy: experience.cancellationPolicy,
+        };
+        await tx.experience.upsert({
+          where: { id: experience.id },
+          create: {
+            id: experience.id,
+            ...data,
+            createdAt: new Date(experience.createdAt),
+            languages: {
+              create: experience.languageCodes.map((languageCode) => ({
+                languageCode,
+              })),
+            },
+          },
+          update: data,
+        });
+        await tx.experienceLanguage.deleteMany({
+          where: { experienceId: experience.id },
+        });
+        await tx.experienceLanguage.createMany({
+          data: experience.languageCodes.map((languageCode) => ({
+            experienceId: experience.id,
+            languageCode,
+          })),
+        });
       }
     });
   } finally {

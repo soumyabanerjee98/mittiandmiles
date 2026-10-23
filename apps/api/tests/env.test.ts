@@ -33,14 +33,32 @@ test("loadEnv reports variable names and omits values", () => {
   );
 });
 
-test("loadEnv defaults authentication to unconfigured", () => {
+test("loadEnv defaults authentication to development without JWT", () => {
   const env = loadEnv({
     NODE_ENV: "test",
     DATABASE_URL:
       "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
   });
-  assert.equal(env.AUTH_MODE, "unconfigured");
+  assert.equal(env.AUTH_MODE, "development");
+  assert.equal(env.JWT_SECRET, undefined);
   assert.equal(env.DIRECT_URL, undefined);
+});
+
+test("loadEnv requires JWT_SECRET when AUTH_MODE is jwt", () => {
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "test",
+        AUTH_MODE: "jwt",
+        DATABASE_URL:
+          "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /JWT_SECRET/);
+      return true;
+    },
+  );
 });
 
 test("loadEnv rejects an unknown authentication mode without echoing it", () => {

@@ -61,7 +61,7 @@ flowchart TB
 | Dependency | Role | Gate |
 |------------|------|------|
 | Payment provider | Checkout, webhooks, refunds, host KYC/settlement | Marketplace eligibility + settlement model in writing before Phase 5 production path |
-| Auth / identity | Sessions/tokens, recovery, admin step-up if supported | ADR before Phase 2 auth integration |
+| Auth / identity | MVP: local email/password + HS256 JWT (no roles in token); refresh rotation in Postgres. OTP, external IdP, recovery, admin step-up TBD | Document `JWT_SECRET` rotation and any future IdP in an ADR before pilot |
 | SMS/OTP, email, push | Auth and operational notifications | Vendor + abuse/rate-limit design |
 | Object storage | Public listing images; private host documents | Retention + short-lived access |
 | Maps / geocoding | Discovery / meeting area (no precise location without purpose) | Optional PostGIS ADR |
@@ -105,7 +105,8 @@ From [`../PROJECT_CONTEXT.md`](../PROJECT_CONTEXT.md) §“Decisions that requir
 - Foreign-customer payment / cross-border considerations
 
 **Security / privacy**
-- Auth provider choice and privileged step-up
+- External IdP vs local JWT at scale; OTP/account recovery; privileged
+  step-up (MVP: local email/password + HS256 JWT — see `apps/api/.env.example`)
 - IDV vendor and document retention/deletion
 - Privacy notice, terms, consent/lawful grounds
 - Production hosting and data residency
@@ -145,7 +146,7 @@ One phase per branch/PR; tests + commit before next phase. Align Cursor prompts 
 |-------|---------|-------------------|
 | **0** Decisions & setup | Move docs to root layout; ADR template + decision log; backlog; mark decisions confirmed vs unresolved | Architecture reviewed; payment/legal questions listed |
 | **1** Dev foundation | `apps/api` skeleton (`/health`, env validation, logging/request IDs); Flutter skeleton with traveller/host/**admin module scaffold**; lint/CI; `.env.example` with a Supabase Postgres URL; no Docker | CI green; **no** business/payment features |
-| **2** Backend foundation | Prisma schema/migrations/seeds (fake data only); validation/errors; auth integration boundary; RBAC; audit log; test DB | Migrations from empty DB; ownership tests; no secrets in fixtures |
+| **2** Backend foundation | Prisma schema/migrations/seeds (fake data only); validation/errors; JWT auth + dev token seam; RBAC; audit log; test DB | Migrations from empty DB; ownership tests; no secrets in fixtures |
 | **3** Cities, hosts, catalogue | City activation; host onboarding/verification; experience CRUD/moderation; slots; search; private doc storage interface | City via data/admin not code; unapproved listings not bookable |
 | **4** Requests, offers, bookings | Trip requests; offers + expiry; snapshots; transactional slot holds; booking state machine; notification outbox | No oversell; expired offers blocked; invalid transitions fail; **no fake payment success** |
 | **5** Payments & ledger | Provider adapter (sandbox); orders; signed webhooks; idempotent attempts; double-entry ledger; refunds; payouts; reconciliation | Client callback alone cannot confirm; duplicate webhooks safe; **no unapproved fund-holding** |
@@ -163,7 +164,7 @@ One phase per branch/PR; tests + commit before next phase. Align Cursor prompts 
 
 - Phase 0: Promote docs to root layout; ADR template + decision log; mark confirmed vs unresolved
 - Phase 1: API + Flutter skeletons, CI, env example, health — no business/payment features
-- Phase 2: Prisma, RBAC, audit, auth boundary, validation — no payment capture
+- Phase 2: Prisma, RBAC, audit, JWT auth, validation — no payment capture
 - Phase 3: Cities, hosts, experiences, availability, search, private docs
 - Phase 4: Requests, offers, reservations, booking state machine + concurrency tests
 - Phase 5: Provider abstraction/sandbox, webhooks, ledger, refunds, payouts — after provider gate or sandbox-only isolation

@@ -22,10 +22,12 @@ Admin workflows include host verification, experience moderation, city/category 
 
 ### API
 
-Node.js, Express and TypeScript. Responsibilities: - authentication
-integration and session validation; - authorization and input
-validation; - domain services; - transactions and state transitions; -
-provider integrations; - audit logs; - OpenAPI documentation.
+Node.js, Express and TypeScript. Responsibilities: - JWT access and
+refresh token issue and validation (roles loaded from the database, not
+from the token); optional development bearer subjects for seeded users;
+- authorization and input validation; - domain services; - transactions
+and state transitions; - provider integrations; - audit logs; - OpenAPI
+documentation.
 
 ### Database
 
@@ -173,7 +175,8 @@ exceptions.
 
 ## 9. Architecture decisions to document
 
-Before production, write ADRs for: - authentication provider; - payment
-provider and settlement flow; - host identity verification; - messaging
+Before production, write ADRs for: - external identity provider vs
+continuing local JWT (MVP uses local JWT); - payment provider and
+settlement flow; - host identity verification; - messaging
 and moderation approach; - object storage and retention; - deployment
 and backups; - whether PostGIS is required for initial search.
