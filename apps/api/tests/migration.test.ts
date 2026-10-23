@@ -333,6 +333,11 @@ async function createBookingGraph(
       timezone: "Asia/Kolkata",
     },
   });
+  await tx.category.upsert({
+    where: { slug: "food" },
+    create: { slug: "food", name: "Food", active: true },
+    update: {},
+  });
   await tx.experience.create({
     data: {
       id: experienceId,
