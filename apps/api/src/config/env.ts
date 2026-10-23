@@ -17,6 +17,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(logLevels).default("info"),
   DATABASE_URL: z.url(),
+  // Used by Prisma migrations. Runtime queries use DATABASE_URL.
+  DIRECT_URL: z.url().optional(),
+  // development: local subject tokens. unconfigured: reject every token.
+  AUTH_MODE: z.enum(["development", "unconfigured"]).default("unconfigured"),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

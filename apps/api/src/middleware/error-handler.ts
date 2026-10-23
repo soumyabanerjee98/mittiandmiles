@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from "express";
 import type { Logger } from "../shared/logger.js";
+import { HttpError } from "../shared/http-error.js";
 import { getRequestId } from "./request-context.js";
 
 type ErrorBody = {
@@ -7,6 +8,7 @@ type ErrorBody = {
     code: string;
     message: string;
     requestId: string;
+    details?: { field: string; message: string }[];
   };
 };
 
@@ -37,6 +39,19 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
             requestId,
           ),
         );
+      return;
+    }
+
+    if (err instanceof HttpError) {
+      logger.warn(
+        { requestId, code: err.code, statusCode: err.statusCode },
+        "request rejected",
+      );
+      const body = errorBody(err.code, err.message, requestId);
+      if (err.details.length > 0) {
+        body.error.details = [...err.details];
+      }
+      res.status(err.statusCode).json(body);
       return;
     }
 

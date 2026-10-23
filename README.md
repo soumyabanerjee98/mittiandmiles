@@ -1,6 +1,6 @@
 # Mitti and Miles
 
-Multi-city marketplace for local experiences in India. This repository is at Phase 1: a TypeScript API skeleton and a Flutter app skeleton. Bookings and payments are not implemented.
+Multi-city marketplace for local experiences in India. This repository is at Phase 2: the API has a Prisma domain schema, validation, an authentication seam, role permissions, and audit logging. Bookings and payment capture are not implemented.
 
 Product and engineering rules live in `markdown/`. Start with `markdown/AGENTS.md`, `markdown/PROJECT_CONTEXT.md`, and `markdown/docs/07_IMPLEMENTATION_PLAN.md`.
 
@@ -9,7 +9,7 @@ Product and engineering rules live in `markdown/`. Start with `markdown/AGENTS.m
 ```text
 apps/api/                 Node.js, Express, TypeScript. Run this app on its own.
 apps/mobile/              Flutter app (traveller, host, protected admin area)
-packages/api-contracts/   OpenAPI (GET /health only)
+packages/api-contracts/   OpenAPI (health and account seam)
 markdown/                 Product and engineering documents
 ```
 
@@ -33,21 +33,29 @@ npm ci
 cp .env.example .env
 ```
 
-Put the Supabase Postgres URI in `DATABASE_URL`, then:
+Put the Supabase Postgres URIs in `DATABASE_URL` and `DIRECT_URL`, then apply the schema and optional development identities:
 
 ```bash
+npx prisma migrate deploy
+npm run db:seed
 npm run dev
 ```
+
+`db:seed` runs only when `NODE_ENV=development`. It inserts fake `@example.com` accounts and no documents or payment data. A local token looks like `Authorization: Bearer dev:development:dev-traveller`. `AUTH_MODE=unconfigured` rejects every token. That is the safe setting until an identity provider is chosen.
+
+`GET /api/v1/me` returns the account stored for that subject. Roles in a header or body are ignored.
 
 On Windows PowerShell:
 
 ```powershell
 cd apps/api
 Copy-Item .env.example .env
+npx prisma migrate deploy
+npm run db:seed
 npm run dev
 ```
 
-`GET http://localhost:3000/health` returns `{ "status": "ok", "service": "mittiandmiles-api" }` and an `X-Request-Id` header. Startup checks environment variables and refuses to boot when they are invalid. The process does not connect to Supabase yet. Database migrations begin in Phase 2.
+`GET http://localhost:3000/health` returns `{ "status": "ok", "service": "mittiandmiles-api" }` and an `X-Request-Id` header. Startup checks environment variables and refuses to boot when they are invalid. The API connects to Supabase when a request needs an account or an audit row.
 
 Flutter:
 
@@ -79,7 +87,16 @@ flutter analyze
 flutter test
 ```
 
-GitHub Actions runs both on push and pull request. The API job installs and checks inside `apps/api`.
+GitHub Actions runs both on push and pull request. The API job installs dependencies, applies migrations to a disposable Postgres 16 service, and then runs the checks. That service is only for CI. Local development keeps using Supabase.
+
+Constraint tests run when `TEST_DATABASE_URL` is set. They insert rows inside transactions that roll back. Local `npm run check` skips them when the variable is unset. Point it at a disposable database.
+
+## Dependencies added for Phase 2
+
+- `@prisma/client` — PostgreSQL access for accounts, permissions, and audit rows
+- `prisma` (development) — schema, migrations, and the development seed
+
+The API stays one Express process. Prisma does not add a local database.
 
 ## Dependencies added for Phase 1
 
@@ -97,4 +114,4 @@ API development:
 
 Flutter uses the Flutter SDK, `flutter_test`, `flutter_lints`, and `flutter_dotenv` for `API_BASE_URL` in `.env`. No routing, HTTP client, or state-management package was added yet. The Supabase client library is not added; the API will use the Postgres connection string.
 
-These do not change the modular-monolith architecture. Ask before adding a package that would.
+Phase 1 packages do not change the modular-monolith architecture. Ask before adding a package that would.
