@@ -1,16 +1,17 @@
 openapi: 3.0.3
 info:
   title: Mitti and Miles API
-  version: 0.3.0
+  version: 0.4.0
   description: >
-    Phase 3 contract. Discovery, host onboarding, listing review, and the
-    Phase 2 account seam are implemented. Bookings and payment capture are
-    not. Object storage is not configured: document and image responses never
-    include bytes or a download URL. The identity provider for production is
-    JWT when configured. Development tokens are `Bearer dev:<provider>:<subject>`
-    and are accepted only when the API process is in development authentication
-    mode. A listing is bookable only when it is published, its host is verified
-    and publicly visible, and its city is active. Search never widens that rule.
+    Phase 4 contract. Trip requests, host offers, slot holds, and booking
+    transitions are implemented. Accepting an offer or creating a booking
+    snapshots server-side price and terms and leaves payment.state NOT_STARTED.
+    There is no client call that confirms payment. Discovery, host onboarding,
+    and the account seam remain. Object storage is not configured. Development
+    tokens are `Bearer dev:<provider>:<subject>` and are accepted only when the
+    API process is in development authentication mode. A listing is bookable
+    only when it is published, its host is verified and publicly visible, and
+    its city is active.
 servers:
   - url: http://localhost:3000
     description: Local development
@@ -190,7 +191,7 @@ paths:
     get:
       operationId: getExperienceAvailability
       summary: Open slots for a bookable listing
-      description: Remaining held seats are applied when bookings exist. This phase stores open capacity only.
+      description: Remaining seats subtract active, unexpired holds from configured capacity.
       parameters:
         - $ref: "#/components/parameters/Id"
         - name: from
@@ -377,6 +378,84 @@ paths:
         "200":
           description: Updated listing. Publish still requires a bookable host and active city.
         "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/trip-requests:
+    post:
+      operationId: createTripRequest
+      summary: Submit a trip request
+      description: >
+        Requires Idempotency-Key. The same key and body return the original
+        request. The server sets expiry. Price is not accepted from the client.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Request created.
+        "200":
+          description: Idempotent replay of the original request.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/trip-requests/{id}/offers:
+    post:
+      operationId: createOffer
+      summary: Host submits one pending offer
+      description: >
+        Eligible hosts are verified, publicly visible, and have a published
+        listing in the request city. The offer price is the total for the
+        requested party. Acceptance is a separate call.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Offer created.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/offers/{id}/accept:
+    post:
+      operationId: acceptOffer
+      summary: Traveller accepts an offer
+      description: >
+        Freezes price, commission snapshot, and cancellation terms into a
+        booking in AWAITING_PAYMENT. Does not mark payment successful. Expired
+        offers are rejected.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Booking created and awaiting payment.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/bookings:
+    post:
+      operationId: createBooking
+      summary: Reserve a published slot
+      description: >
+        Requires Idempotency-Key. The server copies the listing price as the
+        booking total and ignores any client price. Party size reserves seats.
+        The hold expires. payment.state is NOT_STARTED. Concurrent last-seat
+        attempts cannot both succeed.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Booking awaiting payment, with a slot hold.
+        "200":
+          description: Idempotent replay.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/bookings/{id}/complete:
+    post:
+      operationId: completeBooking
+      summary: Host completes a booking
+      description: >
+        Idempotent when the booking is already completed. Invalid source
+        states fail. This does not confirm payment.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Booking completed, or the existing completed booking.
+        "409":
           $ref: "#/components/responses/Error"
 components:
   securitySchemes:

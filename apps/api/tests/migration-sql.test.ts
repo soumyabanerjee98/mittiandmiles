@@ -52,3 +52,22 @@ test("the catalogue migration adds reference data without document bytes", () =>
   assert.equal(catalogueSql.toLowerCase().includes("bytea"), false);
   assert.equal(catalogueSql.includes("@example.com"), false);
 });
+
+test("the booking command migration keeps idempotency and one pending offer", () => {
+  const sql = readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../prisma/migrations/20261023120000_booking_commands/migration.sql",
+    ),
+    "utf8",
+  );
+  for (const snippet of [
+    'CREATE TABLE "command_idempotency"',
+    "command_idempotency_actor_user_id_scope_idempotency_key_key",
+    "offers_one_pending_per_host",
+    "status\" = 'PENDING'",
+  ]) {
+    assert.equal(sql.includes(snippet), true, snippet);
+  }
+  assert.equal(sql.toLowerCase().includes("succeeded"), false);
+});

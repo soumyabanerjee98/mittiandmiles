@@ -25,7 +25,14 @@ const experienceInclude = {
   city: true,
   languages: true,
   images: { orderBy: { sortOrder: "asc" } },
-  slots: true,
+  slots: {
+    include: {
+      reservations: {
+        where: { state: { in: ["HELD", "CONFIRMED"] } },
+        select: { quantity: true, expiresAt: true, state: true },
+      },
+    },
+  },
   blackouts: true,
 } satisfies Prisma.ExperienceInclude;
 
@@ -377,6 +384,7 @@ export class PrismaCatalogueStore implements CatalogueStore {
       where: {
         state: { in: ["HELD", "CONFIRMED"] },
         slot: { experienceId },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
   }
@@ -517,6 +525,28 @@ function experienceScalars(
   };
 }
 
+function heldQuantity(
+  reservations: readonly {
+    quantity: number;
+    expiresAt: Date | null;
+    state: string;
+  }[],
+): number {
+  const now = Date.now();
+  return reservations.reduce((sum, reservation) => {
+    if (reservation.state !== "HELD" && reservation.state !== "CONFIRMED") {
+      return sum;
+    }
+    if (
+      reservation.expiresAt !== null &&
+      reservation.expiresAt.getTime() <= now
+    ) {
+      return sum;
+    }
+    return sum + reservation.quantity;
+  }, 0);
+}
+
 function toExperience(row: ExperienceRow): ExperienceView {
   return {
     id: row.id,
@@ -559,17 +589,21 @@ function toExperience(row: ExperienceRow): ExperienceView {
         "image moderation status",
       ),
     })),
-    slots: row.slots.map((slot) => ({
-      id: slot.id,
-      startsAt: slot.startsAt.toISOString(),
-      endsAt: slot.endsAt.toISOString(),
-      capacity: slot.capacity,
-      status: expectMember(
-        slot.status,
-        ["OPEN", "CLOSED", "CANCELLED"],
-        "slot status",
-      ),
-    })),
+    slots: row.slots.map((slot) => {
+      const held = heldQuantity(slot.reservations);
+      return {
+        id: slot.id,
+        startsAt: slot.startsAt.toISOString(),
+        endsAt: slot.endsAt.toISOString(),
+        capacity: slot.capacity,
+        ...(held > 0 ? { heldQuantity: held } : {}),
+        status: expectMember(
+          slot.status,
+          ["OPEN", "CLOSED", "CANCELLED"],
+          "slot status",
+        ),
+      };
+    }),
     blackouts: row.blackouts.map((blackout) => ({
       id: blackout.id,
       startsAt: blackout.startsAt.toISOString(),
