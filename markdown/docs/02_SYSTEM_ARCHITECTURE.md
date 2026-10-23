@@ -29,9 +29,10 @@ provider integrations; - audit logs; - OpenAPI documentation.
 
 ### Database
 
-PostgreSQL with Prisma. Use migrations committed to source control. Use
-raw SQL migrations for database constraints Prisma cannot express
-adequately.
+PostgreSQL hosted on Supabase, accessed with Prisma. Use the project
+connection string in the environment. Do not run a local Docker
+database. Use migrations committed to source control. Use raw SQL
+migrations for database constraints Prisma cannot express adequately.
 
 ### Geospatial
 

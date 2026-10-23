@@ -19,7 +19,7 @@
 
 ## Architecture
 
--   API: Node.js, Express, TypeScript, PostgreSQL and Prisma.
+-   API: Node.js, Express, TypeScript, and Prisma. PostgreSQL is hosted on Supabase. Do not add a local Docker database.
 -   Admin: a protected admin area inside the Flutter mobile app; no separate admin website.
 -   Mobile: Flutter.
 -   Use REST APIs under `/api/v1`; document them in OpenAPI.

@@ -122,8 +122,9 @@ defined user need justifies it.
 
 -   One Flutter mobile app with traveller, host and protected admin areas.
 -   Node.js + Express + TypeScript API.
--   PostgreSQL + Prisma; use PostGIS where geospatial queries warrant
-    it.
+-   PostgreSQL hosted on Supabase, accessed with Prisma. Use PostGIS
+    where geospatial queries warrant it. Do not run a local Docker
+    database.
 -   Redis for cache/rate limits/background jobs, never as the source of
     truth for financial state.
 -   Queue/worker for notifications, reconciliation and retryable jobs.
