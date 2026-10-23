@@ -139,6 +139,8 @@ export type SlotRecord = {
   startsAt: string;
   endsAt: string;
   capacity: number;
+  /** Seats held or confirmed and not yet expired. Omitted when none. */
+  heldQuantity?: number;
   status: SlotStatus;
 };
 

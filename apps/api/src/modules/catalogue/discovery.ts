@@ -16,8 +16,8 @@ export type BookableShape = {
 };
 
 /**
- * Gate for a later booking command. Unpublished, unapproved, hidden, or
- * inactive-city listings are not bookable. This phase does not create bookings.
+ * Gate for a booking command. Unpublished, unapproved, hidden, or
+ * inactive-city listings are not bookable.
  */
 export function isExperienceBookable(experience: BookableShape): boolean {
   return (
@@ -60,7 +60,8 @@ export function selectableSlots(
     if (Number.isNaN(end) || end <= input.now.getTime()) {
       return false;
     }
-    if (slot.capacity < input.partySize) {
+    const held = slot.heldQuantity ?? 0;
+    if (slot.capacity - held < input.partySize) {
       return false;
     }
     if (isBlackedOut(slot, experience.blackouts)) {

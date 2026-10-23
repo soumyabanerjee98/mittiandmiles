@@ -1,4 +1,4 @@
-// Phase 2 domain schema. PostgreSQL on Supabase is authoritative.
+// Domain schema. PostgreSQL on Supabase is authoritative.
 // Money is integer minor units plus an ISO currency code.
 // Instants are UTC. City and experience schedules keep an IANA time zone.
 // Identity documents are storage references only. No card data.
@@ -275,7 +275,8 @@ model User {
   ticketsRequested  SupportTicket[]    @relation("TicketRequester")
   ticketsAssigned   SupportTicket[]    @relation("TicketAssignee")
   documentsReviewed HostDocument[]     @relation("DocumentReviewer")
-  auditLogs         AuditLog[]         @relation("AuditActor")
+  auditLogs          AuditLog[]          @relation("AuditActor")
+  commandIdempotency CommandIdempotency[]
 
   @@unique([authProvider, authSubject])
   @@index([accountStatus])
@@ -549,6 +550,8 @@ model TripRequest {
   @@map("trip_requests")
 }
 
+/// One PENDING row per host and request is enforced by offers_one_pending_per_host.
+/// That partial unique index lives in SQL because Prisma cannot express it.
 model Offer {
   id             String      @id @default(uuid()) @db.Uuid
   requestId      String      @map("request_id") @db.Uuid
@@ -934,4 +937,24 @@ model OutboxEvent {
 
   @@index([state, createdAt])
   @@map("outbox_events")
+}
+
+/// Retry record for trip-request and booking commands. The same actor, scope,
+/// and key with the same hash returns the original resource. This table does
+/// not store payment success.
+model CommandIdempotency {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  scope          String   @db.VarChar(64)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(128)
+  requestHash    String   @map("request_hash") @db.VarChar(64)
+  resourceType   String   @map("resource_type") @db.VarChar(64)
+  resourceId     String   @map("resource_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, scope, idempotencyKey])
+  @@index([resourceType, resourceId])
+  @@map("command_idempotency")
 }

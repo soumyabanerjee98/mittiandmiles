@@ -150,6 +150,7 @@ export function presentSlot(slot: SlotRecord) {
     startsAt: slot.startsAt,
     endsAt: slot.endsAt,
     capacity: slot.capacity,
+    remaining: slot.capacity - (slot.heldQuantity ?? 0),
     status: slot.status,
   };
 }

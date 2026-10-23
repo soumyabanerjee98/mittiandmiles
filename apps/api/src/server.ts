@@ -8,6 +8,8 @@ import { JwtService } from "./modules/auth/jwt-service.js";
 import { PrismaRefreshSessionStore } from "./modules/auth/prisma-refresh-session-store.js";
 import { createAuthVerifier } from "./modules/auth/verifier.js";
 import { PrismaAuditWriter } from "./modules/audit/prisma-audit-writer.js";
+import { PrismaBookingStore } from "./modules/bookings/prisma-store.js";
+import { BookingService } from "./modules/bookings/service.js";
 import { UnconfiguredPrivateStorage } from "./modules/catalogue/document-storage.js";
 import { PrismaCatalogueStore } from "./modules/catalogue/prisma-store.js";
 import { CatalogueService } from "./modules/catalogue/service.js";
@@ -44,6 +46,7 @@ function start(): void {
       new PrismaCatalogueStore(prisma),
       new UnconfiguredPrivateStorage(),
     ),
+    bookings: new BookingService(new PrismaBookingStore(prisma)),
   });
   const server = createServer(app);
 

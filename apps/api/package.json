@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mitti and Miles API. Phase 3 catalogue and host onboarding. No booking or payment capture.",
+  "description": "Mitti and Miles API. Phase 4 trip requests, offers, and the booking state machine. No payment capture.",
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch --env-file=.env src/server.ts",

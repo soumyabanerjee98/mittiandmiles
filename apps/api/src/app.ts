@@ -8,6 +8,9 @@ import {
 } from "./modules/auth/verifier.js";
 import { createAuthRouter } from "./modules/auth/auth-routes.js";
 import type { AuthService } from "./modules/auth/auth-service.js";
+import { MemoryBookingStore } from "./modules/bookings/memory-store.js";
+import { createBookingRouter } from "./modules/bookings/routes.js";
+import { BookingService } from "./modules/bookings/service.js";
 import { UnconfiguredPrivateStorage } from "./modules/catalogue/document-storage.js";
 import { MemoryCatalogueStore } from "./modules/catalogue/memory-store.js";
 import { createCatalogueRouter } from "./modules/catalogue/routes.js";
@@ -24,6 +27,7 @@ export type AppDependencies = {
   audit: AuditWriter;
   auth: AuthService | null;
   catalogue?: CatalogueService;
+  bookings?: BookingService;
 };
 
 export function createApp(
@@ -48,6 +52,8 @@ export function createApp(
       new MemoryCatalogueStore(),
       new UnconfiguredPrivateStorage(),
     );
+  const bookings =
+    deps.bookings ?? new BookingService(new MemoryBookingStore());
   app.use("/api/v1", createAccountRouter(deps));
   app.use(
     "/api/v1",
@@ -56,6 +62,15 @@ export function createApp(
       users: deps.users,
       audit: deps.audit,
       catalogue,
+    }),
+  );
+  app.use(
+    "/api/v1",
+    createBookingRouter({
+      verifier: deps.verifier,
+      users: deps.users,
+      audit: deps.audit,
+      bookings,
     }),
   );
   if (deps.auth !== null) {
