@@ -5,6 +5,7 @@ import type {
   ProviderEvent,
   ProviderOrder,
   ProviderPaymentFact,
+  ProviderPayoutFact,
   ProviderRefundFact,
   ProviderReport,
 } from "./provider.js";
@@ -33,15 +34,29 @@ const refundEntitySchema = z.looseObject({
   status: z.string(),
 });
 
+const payoutEntitySchema = z.looseObject({
+  id: ref,
+  amount: minor,
+  currency,
+  status: z.string(),
+});
+
 const webhookSchema = z.looseObject({
   event: z.string(),
   payload: z
     .looseObject({
       payment: z.looseObject({ entity: paymentEntitySchema }).optional(),
       refund: z.looseObject({ entity: refundEntitySchema }).optional(),
+      payout: z.looseObject({ entity: payoutEntitySchema }).optional(),
     })
     .optional(),
 });
+
+export class PayoutAccountUnconfiguredError extends Error {
+  constructor() {
+    super("RazorpayX account number is not configured.");
+  }
+}
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -58,15 +73,19 @@ export class RazorpayPaymentProvider implements PaymentProvider {
   readonly publicKeyId: string;
   private readonly fetchImpl: FetchLike;
 
+  private readonly accountNumber: string | null;
+
   constructor(
     private readonly secrets: {
       keyId: string;
       keySecret: string;
       webhookSecret: string;
+      accountNumber?: string | null;
     },
     fetchImpl: FetchLike = fetch,
   ) {
     this.publicKeyId = secrets.keyId;
+    this.accountNumber = secrets.accountNumber ?? null;
     this.fetchImpl = fetchImpl;
   }
 
@@ -176,9 +195,74 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     };
   }
 
+  async createPayout(input: {
+    fundAccountId: string;
+    amountMinor: number;
+    currency: string;
+    mode: "NEFT" | "IMPS" | "RTGS" | "UPI";
+    idempotencyKey: string;
+    referenceId: string;
+  }): Promise<ProviderPayoutFact> {
+    if (this.accountNumber === null) {
+      throw new PayoutAccountUnconfiguredError();
+    }
+    const body = await this.request(
+      "POST",
+      "/payouts",
+      {
+        account_number: this.accountNumber,
+        fund_account_id: input.fundAccountId,
+        amount: input.amountMinor,
+        currency: input.currency,
+        mode: input.mode,
+        purpose: "payout",
+        queue_if_low_balance: true,
+        reference_id: input.referenceId.slice(0, 40),
+        narration: "Host payout",
+      },
+      { "x-payout-idempotency": input.idempotencyKey.slice(0, 36) },
+    );
+    const parsed = payoutEntitySchema.safeParse(body);
+    if (!parsed.success || parsed.data.amount !== input.amountMinor) {
+      throw new Error("Razorpay payout response did not match the request.");
+    }
+    return {
+      providerPayoutRef: parsed.data.id,
+      amountMinor: parsed.data.amount,
+      currency: parsed.data.currency,
+      status: payoutState(parsed.data.status),
+    };
+  }
+
+  async fetchPayout(
+    providerPayoutRef: string,
+  ): Promise<ProviderPayoutFact | null> {
+    const body = await this.request(
+      "GET",
+      `/payouts/${encodeURIComponent(providerPayoutRef)}`,
+    );
+    const parsed = payoutEntitySchema.safeParse(body);
+    if (!parsed.success) {
+      return null;
+    }
+    return {
+      providerPayoutRef: parsed.data.id,
+      amountMinor: parsed.data.amount,
+      currency: parsed.data.currency,
+      status: payoutState(parsed.data.status),
+    };
+  }
+
   async report(): Promise<ProviderReport> {
     const payments = await this.eachPage("/payments", paymentEntitySchema);
     const refunds = await this.eachPage("/refunds", refundEntitySchema);
+    const payouts =
+      this.accountNumber === null
+        ? []
+        : await this.eachPage(
+            `/payouts?account_number=${encodeURIComponent(this.accountNumber)}`,
+            payoutEntitySchema,
+          );
     return {
       payments: payments.flatMap((item) => {
         if (item.order_id === null || item.order_id === undefined) {
@@ -201,7 +285,12 @@ export class RazorpayPaymentProvider implements PaymentProvider {
         amountMinor: item.amount,
         currency: item.currency,
       })),
-      payouts: [],
+      payouts: payouts.map((item) => ({
+        providerPayoutRef: item.id,
+        amountMinor: item.amount,
+        currency: item.currency,
+        status: payoutState(item.status),
+      })),
     };
   }
 
@@ -232,6 +321,7 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     }
     const payment = parsed.payload?.payment?.entity;
     const refund = parsed.payload?.refund?.entity;
+    const payout = parsed.payload?.payout?.entity;
     if (
       parsed.event === "payment.captured" ||
       parsed.event === "payment.failed" ||
@@ -250,6 +340,26 @@ export class RazorpayPaymentProvider implements PaymentProvider {
         paymentId: payment.id,
         amountMinor: payment.amount,
         currency: payment.currency,
+      };
+    }
+    if (
+      parsed.event === "payout.processed" ||
+      parsed.event === "payout.failed" ||
+      parsed.event === "payout.reversed" ||
+      parsed.event === "payout.rejected"
+    ) {
+      if (payout === undefined) {
+        return null;
+      }
+      return {
+        id: eventId,
+        type:
+          parsed.event === "payout.processed"
+            ? "payout.processed"
+            : "payout.failed",
+        payoutId: payout.id,
+        amountMinor: payout.amount,
+        currency: payout.currency,
       };
     }
     if (
@@ -288,9 +398,10 @@ export class RazorpayPaymentProvider implements PaymentProvider {
   ): Promise<T[]> {
     const items: T[] = [];
     for (let page = 0; page < MAX_PAGES; page += 1) {
+      const join = path.includes("?") ? "&" : "?";
       const body = await this.request(
         "GET",
-        `${path}?count=${PAGE_SIZE}&skip=${page * PAGE_SIZE}`,
+        `${path}${join}count=${PAGE_SIZE}&skip=${page * PAGE_SIZE}`,
       );
       const parsed = z
         .looseObject({ items: z.array(itemSchema).optional() })
@@ -308,12 +419,14 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     method: "GET" | "POST",
     path: string,
     jsonBody?: Record<string, unknown>,
+    extraHeaders?: Record<string, string>,
   ): Promise<unknown> {
     const init: RequestInit = {
       method,
       headers: {
         authorization: `Basic ${Buffer.from(`${this.secrets.keyId}:${this.secrets.keySecret}`).toString("base64")}`,
         accept: "application/json",
+        ...(extraHeaders ?? {}),
         ...(jsonBody === undefined
           ? {}
           : { "content-type": "application/json" }),
@@ -334,6 +447,10 @@ const APPLIED_EVENTS = new Set([
   "order.paid",
   "refund.processed",
   "refund.failed",
+  "payout.processed",
+  "payout.failed",
+  "payout.reversed",
+  "payout.rejected",
 ]);
 
 function readWebhook(
@@ -364,6 +481,21 @@ function pickPayment(
   }
   const failed = items.find((item) => paymentStatus(item.status) === "failed");
   return failed ?? items[0];
+}
+
+function payoutState(status: string): ProviderPayoutFact["status"] {
+  if (status === "processed") {
+    return "processed";
+  }
+  if (
+    status === "failed" ||
+    status === "rejected" ||
+    status === "reversed" ||
+    status === "cancelled"
+  ) {
+    return "failed";
+  }
+  return "pending";
 }
 
 function paymentStatus(status: string): ProviderPaymentFact["status"] {

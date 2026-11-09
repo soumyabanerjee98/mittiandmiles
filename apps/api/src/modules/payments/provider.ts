@@ -23,7 +23,7 @@ export type ProviderPayoutFact = {
   providerPayoutRef: string;
   amountMinor: number;
   currency: string;
-  status: "pending" | "processed" | "failed" | string;
+  status: string;
 };
 
 export type ProviderReport = {
@@ -50,7 +50,16 @@ export type ProviderRefundEvent = {
   currency: string;
 };
 
-export type ProviderEvent = ProviderPaymentEvent | ProviderRefundEvent;
+export type ProviderPayoutEvent = {
+  id: string;
+  type: "payout.processed" | "payout.failed";
+  payoutId: string;
+  amountMinor: number;
+  currency: string;
+};
+
+export type ProviderEvent =
+  ProviderPaymentEvent | ProviderRefundEvent | ProviderPayoutEvent;
 
 export type PaymentProvider = {
   readonly name: string;
@@ -74,6 +83,19 @@ export type PaymentProvider = {
     idempotencyKey: string;
   }): Promise<{ providerRefundRef: string }>;
   fetchRefund(providerRefundRef: string): Promise<ProviderRefundFact | null>;
+  /**
+   * Submit a payout from the platform account to a host fund account.
+   * This is not a split of the traveller payment.
+   */
+  createPayout(input: {
+    fundAccountId: string;
+    amountMinor: number;
+    currency: string;
+    mode: "NEFT" | "IMPS" | "RTGS" | "UPI";
+    idempotencyKey: string;
+    referenceId: string;
+  }): Promise<ProviderPayoutFact>;
+  fetchPayout(providerPayoutRef: string): Promise<ProviderPayoutFact | null>;
   report(): Promise<ProviderReport>;
   verifyWebhook(rawBody: Buffer, signatureHeader: string | undefined): boolean;
   parseWebhook(

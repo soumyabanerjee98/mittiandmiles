@@ -5,6 +5,7 @@ import type {
   ProviderEvent,
   ProviderOrder,
   ProviderPaymentFact,
+  ProviderPayoutFact,
   ProviderRefundFact,
   ProviderReport,
 } from "./provider.js";
@@ -35,6 +36,20 @@ const refundEventSchema = z
       .object({
         refundId: ref,
         paymentId: ref,
+        amountMinor: z.number().int().positive(),
+        currency,
+      })
+      .strict(),
+  })
+  .strict();
+
+const payoutEventSchema = z
+  .object({
+    id: ref,
+    type: z.enum(["payout.processed", "payout.failed"]),
+    data: z
+      .object({
+        payoutId: ref,
         amountMinor: z.number().int().positive(),
         currency,
       })
@@ -81,7 +96,8 @@ export class SandboxPaymentProvider implements PaymentProvider {
   private readonly ordersByKey = new Map<string, SandboxOrder>();
   private readonly refunds = new Map<string, SandboxRefund>();
   private readonly refundsByKey = new Map<string, SandboxRefund>();
-  private readonly payouts: ProviderReport["payouts"] = [];
+  private readonly payouts: ProviderPayoutFact[] = [];
+  private readonly payoutByKey = new Map<string, ProviderPayoutFact>();
 
   constructor(
     private readonly secrets: {
@@ -189,6 +205,45 @@ export class SandboxPaymentProvider implements PaymentProvider {
     return Promise.resolve({ providerRefundRef: refund.providerRefundRef });
   }
 
+  createPayout(input: {
+    fundAccountId: string;
+    amountMinor: number;
+    currency: string;
+    mode: "NEFT" | "IMPS" | "RTGS" | "UPI";
+    idempotencyKey: string;
+    referenceId: string;
+  }): Promise<ProviderPayoutFact> {
+    if (
+      input.fundAccountId.length === 0 ||
+      input.referenceId.length === 0 ||
+      input.mode.length === 0
+    ) {
+      return Promise.reject(new Error("Payout destination is missing."));
+    }
+    const existing = this.payoutByKey.get(input.idempotencyKey);
+    if (existing !== undefined) {
+      return Promise.resolve({ ...existing });
+    }
+    const fact: ProviderPayoutFact = {
+      providerPayoutRef: `pout_${this.payoutByKey.size + 1}`,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      status: "pending",
+    };
+    this.payoutByKey.set(input.idempotencyKey, fact);
+    this.payouts.push(fact);
+    return Promise.resolve({ ...fact });
+  }
+
+  fetchPayout(providerPayoutRef: string): Promise<ProviderPayoutFact | null> {
+    for (const fact of this.payoutByKey.values()) {
+      if (fact.providerPayoutRef === providerPayoutRef) {
+        return Promise.resolve({ ...fact });
+      }
+    }
+    return Promise.resolve(null);
+  }
+
   fetchRefund(providerRefundRef: string): Promise<ProviderRefundFact | null> {
     const refund = this.refunds.get(providerRefundRef);
     if (refund === undefined) {
@@ -272,6 +327,16 @@ export class SandboxPaymentProvider implements PaymentProvider {
         currency: payment.data.data.currency,
       };
     }
+    const payout = payoutEventSchema.safeParse(json);
+    if (payout.success) {
+      return {
+        id: payout.data.id,
+        type: payout.data.type,
+        payoutId: payout.data.data.payoutId,
+        amountMinor: payout.data.data.amountMinor,
+        currency: payout.data.data.currency,
+      };
+    }
     const refund = refundEventSchema.safeParse(json);
     if (refund.success) {
       return {
@@ -319,8 +384,47 @@ export class SandboxPaymentProvider implements PaymentProvider {
     refund.status = status;
   }
 
-  notePayout(input: ProviderReport["payouts"][number]): void {
+  notePayout(input: ProviderPayoutFact): void {
     this.payouts.push({ ...input });
+  }
+
+  recordPayoutResult(
+    providerPayoutRef: string,
+    status: "processed" | "failed",
+  ): void {
+    for (const fact of this.payoutByKey.values()) {
+      if (fact.providerPayoutRef === providerPayoutRef) {
+        fact.status = status;
+      }
+    }
+    const listed = this.payouts.find(
+      (row) => row.providerPayoutRef === providerPayoutRef,
+    );
+    if (listed !== undefined) {
+      listed.status = status;
+    }
+  }
+
+  payoutEvent(input: {
+    id: string;
+    payoutRef: string;
+    type: "payout.processed" | "payout.failed";
+  }): SignedWebhook {
+    const fact = [...this.payoutByKey.values()].find(
+      (row) => row.providerPayoutRef === input.payoutRef,
+    );
+    if (fact === undefined) {
+      throw new Error("Unknown sandbox payout.");
+    }
+    return this.sign({
+      id: input.id,
+      type: input.type,
+      data: {
+        payoutId: fact.providerPayoutRef,
+        amountMinor: fact.amountMinor,
+        currency: fact.currency,
+      },
+    });
   }
 
   paymentEvent(input: {
@@ -368,6 +472,10 @@ export class SandboxPaymentProvider implements PaymentProvider {
 
   refundCount(): number {
     return this.refunds.size;
+  }
+
+  payoutCount(): number {
+    return this.payoutByKey.size;
   }
 
   private sign(body: unknown): SignedWebhook {
@@ -442,6 +550,14 @@ export class UnconfiguredPaymentProvider implements PaymentProvider {
   }
 
   fetchRefund(): Promise<ProviderRefundFact | null> {
+    return Promise.resolve(null);
+  }
+
+  createPayout(): Promise<ProviderPayoutFact> {
+    return Promise.reject(new Error("Payment provider is not configured."));
+  }
+
+  fetchPayout(): Promise<ProviderPayoutFact | null> {
     return Promise.resolve(null);
   }
 

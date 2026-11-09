@@ -129,6 +129,7 @@ class PrismaPaymentTx implements PaymentTx {
     id: string;
     userId: string;
     verificationStatus: HostVerificationStatus;
+    payoutProviderReference: string | null;
   } | null> {
     const row = await this.db.hostProfile.findUnique({ where: { id: hostId } });
     if (row === null) {
@@ -138,6 +139,7 @@ class PrismaPaymentTx implements PaymentTx {
       id: row.id,
       userId: row.userId,
       verificationStatus: hostStatus(row.verificationStatus),
+      payoutProviderReference: row.payoutProviderReference,
     };
   }
 
@@ -497,6 +499,25 @@ class PrismaPaymentTx implements PaymentTx {
     });
   }
 
+  async findPayout(id: string): Promise<PayoutRecord | null> {
+    const row = await this.db.payout.findUnique({
+      where: { id },
+      include: payoutInclude,
+    });
+    return row === null ? null : toPayout(row);
+  }
+
+  async findPayoutByProviderRef(
+    provider: string,
+    providerPayoutRef: string,
+  ): Promise<PayoutRecord | null> {
+    const row = await this.db.payout.findFirst({
+      where: { provider, providerPayoutRef },
+      include: payoutInclude,
+    });
+    return row === null ? null : toPayout(row);
+  }
+
   async findPayoutByKey(idempotencyKey: string): Promise<PayoutRecord | null> {
     const row = await this.db.payout.findUnique({
       where: { idempotencyKey },
@@ -535,8 +556,33 @@ class PrismaPaymentTx implements PaymentTx {
     return rows.map(toPayout);
   }
 
-  async listPayouts(): Promise<PayoutRecord[]> {
-    const rows = await this.db.payout.findMany({ include: payoutInclude });
+  async updatePayout(
+    id: string,
+    patch: {
+      status?: PayoutRecord["status"];
+      providerPayoutRef?: string;
+      settledAt?: string | null;
+    },
+  ): Promise<void> {
+    const data: Prisma.PayoutUpdateInput = {};
+    if (patch.status !== undefined) {
+      data.status = patch.status;
+    }
+    if (patch.providerPayoutRef !== undefined) {
+      data.providerPayoutRef = patch.providerPayoutRef;
+    }
+    if (patch.settledAt !== undefined) {
+      data.settledAt =
+        patch.settledAt === null ? null : new Date(patch.settledAt);
+    }
+    await this.db.payout.update({ where: { id }, data });
+  }
+
+  async listPayouts(status?: PayoutRecord["status"]): Promise<PayoutRecord[]> {
+    const rows = await this.db.payout.findMany({
+      ...(status === undefined ? {} : { where: { status } }),
+      include: payoutInclude,
+    });
     return rows.map(toPayout);
   }
 
@@ -750,6 +796,7 @@ function toPayout(row: {
   status: PayoutRecord["status"];
   idempotencyKey: string | null;
   createdAt: Date;
+  settledAt: Date | null;
   host: { userId: string };
   allocations: { bookingId: string; amountMinor: number }[];
 }): PayoutRecord {
@@ -768,6 +815,7 @@ function toPayout(row: {
       amountMinor: allocation.amountMinor,
     })),
     createdAt: row.createdAt.toISOString(),
+    settledAt: row.settledAt === null ? null : row.settledAt.toISOString(),
   };
 }
 
@@ -781,6 +829,7 @@ function webhookJson(payload: WebhookPayload): Prisma.InputJsonObject {
       ? {}
       : { paymentId: payload.paymentId }),
     ...(payload.refundId === undefined ? {} : { refundId: payload.refundId }),
+    ...(payload.payoutId === undefined ? {} : { payoutId: payload.payoutId }),
   };
 }
 

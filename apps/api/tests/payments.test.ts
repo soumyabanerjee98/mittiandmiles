@@ -441,7 +441,8 @@ test("payout records stay eligible and cannot exceed the ledger or ignore a hold
     .post("/api/v1/admin/payouts/50000000-0000-4000-8000-000000000099/settle")
     .set("Authorization", token("dev-finance"))
     .send({ status: "SETTLED" });
-  assert.equal(settle.status, 404);
+  assert.equal(settle.status, 400);
+  assert.equal(errorCode(settle), "VALIDATION_ERROR");
 
   const denied = await request(app)
     .post("/api/v1/admin/payouts")
@@ -536,6 +537,79 @@ test("payout records stay eligible and cannot exceed the ledger or ignore a hold
     .set("Authorization", token("dev-host"));
   assert.equal(rows(payouts).length, 1);
   assert.equal(store.bookingStatus(completedId), "COMPLETED");
+});
+
+test("finance submits an eligible payout and settles it from the provider fact", async () => {
+  const { app, store, sandbox } = harness();
+  const recorded = await request(app)
+    .post("/api/v1/admin/payouts")
+    .set("Authorization", token("dev-finance"))
+    .set("Idempotency-Key", "payout-settle")
+    .send({
+      hostId,
+      currency: "INR",
+      allocations: [{ bookingId: completedId, amountMinor: 1800 }],
+    });
+  assert.equal(recorded.status, 201);
+  const payoutId = text(recorded, "id");
+
+  const missing = await request(app)
+    .post(`/api/v1/admin/payouts/${payoutId}/settle`)
+    .set("Authorization", token("dev-finance"))
+    .send({});
+  assert.equal(missing.status, 409);
+  assert.equal(errorCode(missing), "HOST_PAYOUT_ACCOUNT_MISSING");
+
+  store.setHostPayoutAccount(hostId, "fa_host_1");
+  const listed = await request(app)
+    .get("/api/v1/admin/payouts")
+    .query({ status: "ELIGIBLE" })
+    .set("Authorization", token("dev-finance"));
+  assert.equal(listed.status, 200);
+  assert.equal(rows(listed).length, 1);
+  const listedRow = rows(listed)[0];
+  assert.ok(listedRow !== undefined);
+  const allocations = listedRow.allocations;
+  assert.equal(Array.isArray(allocations), true);
+  if (!Array.isArray(allocations)) {
+    return;
+  }
+  assert.equal(allocations.length, 1);
+
+  const submitted = await request(app)
+    .post(`/api/v1/admin/payouts/${payoutId}/settle`)
+    .set("Authorization", token("dev-finance"))
+    .send({ mode: "NEFT" });
+  assert.equal(submitted.status, 200);
+  assert.equal(text(submitted, "status"), "SUBMITTED");
+  assert.equal(body(submitted).settledAt, null);
+  const payoutRef = text(submitted, "providerPayoutRef");
+
+  const again = await request(app)
+    .post(`/api/v1/admin/payouts/${payoutId}/settle`)
+    .set("Authorization", token("dev-finance"))
+    .send({});
+  assert.equal(again.status, 200);
+  assert.equal(text(again, "providerPayoutRef"), payoutRef);
+  assert.equal(sandbox.payoutCount(), 1);
+
+  sandbox.recordPayoutResult(payoutRef, "processed");
+  const signed = sandbox.payoutEvent({
+    id: "evt_payout_1",
+    payoutRef,
+    type: "payout.processed",
+  });
+  const webhook = await postWebhook(app, signed.raw, signed.signature);
+  assert.equal(webhook.status, 200);
+
+  const settled = await request(app)
+    .get("/api/v1/admin/payouts")
+    .query({ status: "SETTLED" })
+    .set("Authorization", token("dev-finance"));
+  const settledRow = rows(settled)[0];
+  assert.ok(settledRow !== undefined);
+  assert.equal(stringField(settledRow, "status"), "SETTLED");
+  assert.equal(typeof settledRow.settledAt, "string");
 });
 
 test("reconciliation records provider gaps without changing payment state", async () => {

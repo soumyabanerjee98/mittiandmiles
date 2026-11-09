@@ -7,11 +7,13 @@ import {
   disputeHold,
   hidden,
   hostNotEligible,
+  hostPayoutAccountMissing,
   idempotencyConflict,
   invalidState,
   notFound,
   paymentInProgress,
   payoutExceedsPayable,
+  payoutProviderUnavailable,
   providerUnavailable,
   refundExceedsCaptured,
   refundHold,
@@ -19,6 +21,7 @@ import {
   invalid,
 } from "./errors.js";
 import { captureLines, refundLines, refundSplit } from "./ledger.js";
+import { PayoutAccountUnconfiguredError } from "./razorpay-provider.js";
 import type { PaymentProvider, ProviderEvent } from "./provider.js";
 import { exceptionView, findDiscrepancies } from "./reconcile.js";
 import type { PaymentDatabase, PaymentTx, WebhookPayload } from "./tx.js";
@@ -27,6 +30,7 @@ import type {
   PaymentBooking,
   PayoutAllocationRecord,
   PayoutRecord,
+  PayoutStatus,
   ReconciliationKind,
   RefundRecord,
 } from "./types.js";
@@ -483,6 +487,7 @@ export class PaymentService {
             amountMinor,
             currency: input.currency,
             status: "ELIGIBLE",
+            settledAt: null,
             idempotencyKey,
             allocations: input.allocations.map((row) => ({ ...row })),
             createdAt: this.now().toISOString(),
@@ -508,6 +513,32 @@ export class PaymentService {
         },
       ),
     );
+  }
+
+  listAdminPayouts(status?: PayoutStatus): Promise<PayoutRecord[]> {
+    return this.database.transaction((tx) => tx.listPayouts(status));
+  }
+
+  settlePayout(
+    payoutId: string,
+    mode: "NEFT" | "IMPS" | "RTGS" | "UPI",
+  ): Promise<PayoutRecord> {
+    if (!this.provider.configured) {
+      throw providerUnavailable();
+    }
+    return this.database.transaction(async (tx) => {
+      const existing = await tx.findPayout(payoutId);
+      if (existing === null) {
+        throw notFound();
+      }
+      return tx.exclusive(
+        [
+          `payout:${payoutId}`,
+          ...existing.allocations.map((row) => `booking:${row.bookingId}`),
+        ],
+        () => this.submitPayout(tx, payoutId, mode),
+      );
+    });
   }
 
   listOwnPayouts(actor: PaymentActor): Promise<PayoutRecord[]> {
@@ -595,6 +626,88 @@ export class PaymentService {
     );
   }
 
+  private async submitPayout(
+    tx: PaymentTx,
+    payoutId: string,
+    mode: "NEFT" | "IMPS" | "RTGS" | "UPI",
+  ): Promise<PayoutRecord> {
+    const payout = await tx.findPayout(payoutId);
+    if (payout === null) {
+      throw notFound();
+    }
+    if (payout.status === "SUBMITTED" || payout.status === "SETTLED") {
+      return payout;
+    }
+    if (payout.status !== "ELIGIBLE") {
+      throw invalidState("This payout can no longer be submitted.");
+    }
+    const host = await tx.findHost(payout.hostId);
+    if (host === null || host.verificationStatus !== "VERIFIED") {
+      throw hostNotEligible();
+    }
+    if (host.payoutProviderReference === null) {
+      throw hostPayoutAccountMissing();
+    }
+    for (const allocation of payout.allocations) {
+      const booking = await tx.findBooking(allocation.bookingId);
+      if (booking === null || booking.hostId !== payout.hostId) {
+        throw notFound();
+      }
+      if (booking.status === "DISPUTED") {
+        throw disputeHold();
+      }
+      if (booking.status !== "COMPLETED") {
+        throw invalidState("This booking is not eligible for settlement.");
+      }
+      if (await tx.hasOpenRefund(booking.id)) {
+        throw refundHold();
+      }
+      const payable = await tx.hostPayable(booking.id);
+      const net =
+        payable === null ? 0 : payable.creditMinor - payable.debitMinor;
+      if (net < (await tx.allocatedMinor(booking.id))) {
+        throw payoutExceedsPayable();
+      }
+    }
+    let created;
+    try {
+      created = await this.provider.createPayout({
+        fundAccountId: host.payoutProviderReference,
+        amountMinor: payout.amountMinor,
+        currency: payout.currency,
+        mode,
+        idempotencyKey: payout.id,
+        referenceId: payout.id,
+      });
+    } catch (error: unknown) {
+      if (error instanceof PayoutAccountUnconfiguredError) {
+        throw payoutProviderUnavailable();
+      }
+      throw error;
+    }
+    const fact = await this.provider.fetchPayout(created.providerPayoutRef);
+    if (
+      fact === null ||
+      fact.amountMinor !== payout.amountMinor ||
+      fact.currency !== payout.currency ||
+      fact.providerPayoutRef !== created.providerPayoutRef
+    ) {
+      await this.recordException(tx, {
+        kind: "PAYOUT_MISMATCH",
+        resourceRef: payout.id,
+        currency: payout.currency,
+        expectedMinor: payout.amountMinor,
+        actualMinor: fact?.amountMinor ?? null,
+        detail: "The provider payout did not match the eligible record.",
+      });
+      throw invalidState("The provider payout did not match this record.");
+    }
+    await tx.updatePayout(payout.id, {
+      providerPayoutRef: fact.providerPayoutRef,
+    });
+    return this.applyPayoutFact(tx, fact, null);
+  }
+
   private async lockWebhook(event: ProviderEvent): Promise<void> {
     const keys = [`event:${this.provider.name}:${event.id}`];
     if (isPaymentEvent(event)) {
@@ -604,6 +717,14 @@ export class PaymentService {
       );
       if (attempt !== null) {
         keys.push(`booking:${attempt.bookingId}`);
+      }
+    } else if (isPayoutEvent(event)) {
+      const payout = await this.database.transaction((tx) =>
+        tx.findPayoutByProviderRef(this.provider.name, event.payoutId),
+      );
+      keys.push(`payout:${payout?.id ?? event.payoutId}`);
+      for (const allocation of payout?.allocations ?? []) {
+        keys.push(`booking:${allocation.bookingId}`);
       }
     } else {
       keys.push(`refund:${event.refundId}`);
@@ -657,6 +778,9 @@ export class PaymentService {
     if (isPaymentEvent(event)) {
       const fact = await this.provider.fetchPayment(event.orderId);
       await this.applyPaymentFact(tx, fact, event);
+    } else if (isPayoutEvent(event)) {
+      const fact = await this.provider.fetchPayout(event.payoutId);
+      await this.applyPayoutFact(tx, fact, event);
     } else {
       await this.applyRefundFact(tx, event);
     }
@@ -804,6 +928,117 @@ export class PaymentService {
     );
   }
 
+  private async applyPayoutFact(
+    tx: PaymentTx,
+    fact: Awaited<ReturnType<PaymentProvider["fetchPayout"]>>,
+    event: Extract<
+      ProviderEvent,
+      { type: "payout.processed" | "payout.failed" }
+    > | null,
+  ): Promise<PayoutRecord> {
+    if (fact === null) {
+      if (event !== null) {
+        await this.recordException(tx, {
+          kind: "INTERNAL_PAYMENT_MISSING_PROVIDER",
+          resourceRef: event.payoutId,
+          currency: event.currency,
+          expectedMinor: event.amountMinor,
+          actualMinor: null,
+          detail: "Provider has no payout record for this reference.",
+        });
+      }
+      throw invalidState("The provider payout could not be read.");
+    }
+    const payout = await tx.findPayoutByProviderRef(
+      this.provider.name,
+      fact.providerPayoutRef,
+    );
+    if (payout === null) {
+      await this.recordException(tx, {
+        kind: "PROVIDER_PAYMENT_MISSING_INTERNAL",
+        resourceRef: fact.providerPayoutRef,
+        currency: fact.currency,
+        expectedMinor: fact.amountMinor,
+        actualMinor: null,
+        detail: "A provider payout has no internal payout record.",
+      });
+      throw notFound();
+    }
+    if (
+      event !== null &&
+      (event.amountMinor !== fact.amountMinor ||
+        event.currency !== fact.currency ||
+        event.payoutId !== fact.providerPayoutRef)
+    ) {
+      await this.recordException(tx, {
+        kind: "PAYOUT_MISMATCH",
+        resourceRef: fact.providerPayoutRef,
+        currency: fact.currency,
+        expectedMinor: fact.amountMinor,
+        actualMinor: event.amountMinor,
+        detail: "Provider payout event does not match the provider payout.",
+      });
+      return payout;
+    }
+    if (
+      fact.amountMinor !== payout.amountMinor ||
+      fact.currency !== payout.currency
+    ) {
+      await this.recordException(tx, {
+        kind: "PAYOUT_MISMATCH",
+        resourceRef: payout.id,
+        currency: payout.currency,
+        expectedMinor: payout.amountMinor,
+        actualMinor: fact.amountMinor,
+        detail: "Provider payout does not match the stored payout.",
+      });
+      return payout;
+    }
+    if (payout.status === "SETTLED" || payout.status === "FAILED") {
+      return payout;
+    }
+    if (fact.status === "failed" || event?.type === "payout.failed") {
+      await tx.updatePayout(payout.id, {
+        status: "FAILED",
+        providerPayoutRef: fact.providerPayoutRef,
+        settledAt: null,
+      });
+    } else if (fact.status === "processed") {
+      const settledAt = this.now().toISOString();
+      await tx.updatePayout(payout.id, {
+        status: "SETTLED",
+        providerPayoutRef: fact.providerPayoutRef,
+        settledAt,
+      });
+      await tx.insertOutbox(
+        randomUUID(),
+        "payout.settled",
+        payout.id,
+        { bookingId: payout.id, status: "SETTLED" },
+        settledAt,
+      );
+    } else {
+      await tx.updatePayout(payout.id, {
+        status: "SUBMITTED",
+        providerPayoutRef: fact.providerPayoutRef,
+      });
+      if (payout.status !== "SUBMITTED") {
+        await tx.insertOutbox(
+          randomUUID(),
+          "payout.submitted",
+          payout.id,
+          { bookingId: payout.id, status: "SUBMITTED" },
+          this.now().toISOString(),
+        );
+      }
+    }
+    const stored = await tx.findPayout(payout.id);
+    if (stored === null) {
+      throw notFound();
+    }
+    return stored;
+  }
+
   private async applyRefundFact(
     tx: PaymentTx,
     event: Extract<
@@ -946,6 +1181,15 @@ export class PaymentService {
   }
 }
 
+function isPayoutEvent(
+  event: ProviderEvent,
+): event is Extract<
+  ProviderEvent,
+  { type: "payout.processed" | "payout.failed" }
+> {
+  return event.type === "payout.processed" || event.type === "payout.failed";
+}
+
 function isPaymentEvent(
   event: ProviderEvent,
 ): event is Extract<
@@ -963,6 +1207,14 @@ function payloadOf(event: ProviderEvent): WebhookPayload {
       currency: event.currency,
       orderId: event.orderId,
       paymentId: event.paymentId,
+    };
+  }
+  if (isPayoutEvent(event)) {
+    return {
+      type: event.type,
+      amountMinor: event.amountMinor,
+      currency: event.currency,
+      payoutId: event.payoutId,
     };
   }
   return {

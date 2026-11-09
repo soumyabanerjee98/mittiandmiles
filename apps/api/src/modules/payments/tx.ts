@@ -7,6 +7,7 @@ import type {
   PaymentBooking,
   PayoutRecord,
   ReconciliationKind,
+  PayoutStatus,
   RefundRecord,
   RefundStatus,
   WebhookRecord,
@@ -26,6 +27,7 @@ export type PaymentTx = {
     id: string;
     userId: string;
     verificationStatus: PaymentBooking["hostVerificationStatus"];
+    payoutProviderReference: string | null;
   } | null>;
   listBookingsForHostUser(userId: string): Promise<PaymentBooking[]>;
   findAttempt(id: string): Promise<PaymentAttempt | null>;
@@ -95,9 +97,22 @@ export type PaymentTx = {
   ): Promise<void>;
   listRefunds(bookingId?: string): Promise<RefundRecord[]>;
   findPayoutByKey(idempotencyKey: string): Promise<PayoutRecord | null>;
+  findPayout(id: string): Promise<PayoutRecord | null>;
+  findPayoutByProviderRef(
+    provider: string,
+    providerPayoutRef: string,
+  ): Promise<PayoutRecord | null>;
   insertPayout(row: PayoutRecord): Promise<void>;
+  updatePayout(
+    id: string,
+    patch: {
+      status?: PayoutStatus;
+      providerPayoutRef?: string;
+      settledAt?: string | null;
+    },
+  ): Promise<void>;
   listPayoutsForHostUser(userId: string): Promise<PayoutRecord[]>;
-  listPayouts(): Promise<PayoutRecord[]>;
+  listPayouts(status?: PayoutStatus): Promise<PayoutRecord[]>;
   hostEarnings(
     userId: string,
   ): Promise<
@@ -120,6 +135,7 @@ export type WebhookPayload = {
   orderId?: string;
   paymentId?: string;
   refundId?: string;
+  payoutId?: string;
 };
 
 export type PaymentDatabase = {

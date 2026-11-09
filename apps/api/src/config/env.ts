@@ -48,6 +48,11 @@ const envSchema = z
     RAZORPAY_KEY_ID: z.string().min(8).max(64).optional(),
     RAZORPAY_KEY_SECRET: z.string().min(8).max(128).optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().min(8).max(256).optional(),
+    // RazorpayX current-account number. Required only when submitting a host payout.
+    RAZORPAYX_ACCOUNT_NUMBER: z
+      .string()
+      .regex(/^[0-9]{8,30}$/)
+      .optional(),
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === "jwt" && env.JWT_SECRET === undefined) {

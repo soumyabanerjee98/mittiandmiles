@@ -29,6 +29,7 @@ export class MemoryPaymentStore implements PaymentDatabase {
   private readonly exceptions: ExceptionRecord[] = [];
   private readonly events: { bookingId: string; eventType: string }[] = [];
   private readonly tails = new Map<string, Promise<void>>();
+  private readonly hostPayoutAccounts = new Map<string, string>();
 
   transaction<T>(run: (tx: PaymentTx) => Promise<T>): Promise<T> {
     return run(this.tx());
@@ -51,6 +52,10 @@ export class MemoryPaymentStore implements PaymentDatabase {
 
   seedPayout(row: PayoutRecord): void {
     this.payouts.push(structuredClone(row));
+  }
+
+  setHostPayoutAccount(hostId: string, reference: string): void {
+    this.hostPayoutAccounts.set(hostId, reference);
   }
 
   bookingStatus(id: string): string | null {
@@ -97,6 +102,7 @@ export class MemoryPaymentStore implements PaymentDatabase {
           id: booking.hostId,
           userId: booking.hostUserId,
           verificationStatus: booking.hostVerificationStatus,
+          payoutProviderReference: this.hostPayoutAccounts.get(hostId) ?? null,
         });
       },
       listBookingsForHostUser: (userId) =>
@@ -296,8 +302,37 @@ export class MemoryPaymentStore implements PaymentDatabase {
               null,
           ),
         ),
+      findPayout: (id) =>
+        Promise.resolve(
+          clone(this.payouts.find((row) => row.id === id) ?? null),
+        ),
+      findPayoutByProviderRef: (provider, providerPayoutRef) =>
+        Promise.resolve(
+          clone(
+            this.payouts.find(
+              (row) =>
+                row.provider === provider &&
+                row.providerPayoutRef === providerPayoutRef,
+            ) ?? null,
+          ),
+        ),
       insertPayout: (row) => {
         this.payouts.push(structuredClone(row));
+        return Promise.resolve();
+      },
+      updatePayout: (id, patch) => {
+        const row = this.payouts.find((item) => item.id === id);
+        if (row !== undefined) {
+          if (patch.status !== undefined) {
+            row.status = patch.status;
+          }
+          if (patch.providerPayoutRef !== undefined) {
+            row.providerPayoutRef = patch.providerPayoutRef;
+          }
+          if (patch.settledAt !== undefined) {
+            row.settledAt = patch.settledAt;
+          }
+        }
         return Promise.resolve();
       },
       listPayoutsForHostUser: (userId) =>
@@ -306,7 +341,12 @@ export class MemoryPaymentStore implements PaymentDatabase {
             .filter((row) => row.hostUserId === userId)
             .map((row) => clone(row)),
         ),
-      listPayouts: () => Promise.resolve(this.payouts.map((row) => clone(row))),
+      listPayouts: (status) =>
+        Promise.resolve(
+          this.payouts
+            .filter((row) => status === undefined || row.status === status)
+            .map((row) => clone(row)),
+        ),
       hostEarnings: (userId) => Promise.resolve(this.earnings(userId)),
       postLedger: (post) => {
         if (

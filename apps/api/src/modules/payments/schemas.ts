@@ -31,6 +31,27 @@ export const reviewBodySchema = z
   })
   .strict();
 
+export const payoutListQuerySchema = z
+  .object({
+    status: z
+      .enum([
+        "PENDING_ELIGIBILITY",
+        "ELIGIBLE",
+        "SUBMITTED",
+        "SETTLED",
+        "FAILED",
+        "ON_HOLD",
+      ])
+      .optional(),
+  })
+  .strict();
+
+export const settlePayoutBodySchema = z
+  .object({
+    mode: z.enum(["NEFT", "IMPS", "RTGS", "UPI"]).optional(),
+  })
+  .strict();
+
 export const payoutBodySchema = z
   .object({
     hostId: z.uuid(),

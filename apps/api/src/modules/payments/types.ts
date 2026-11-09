@@ -96,6 +96,7 @@ export type PayoutRecord = {
   idempotencyKey: string;
   allocations: PayoutAllocationRecord[];
   createdAt: string;
+  settledAt: string | null;
 };
 
 export type IdempotencyRecord = {

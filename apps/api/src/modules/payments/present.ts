@@ -69,5 +69,6 @@ export function presentPayout(payout: PayoutRecord) {
       amountMinor: row.amountMinor,
     })),
     createdAt: payout.createdAt,
+    settledAt: payout.settledAt,
   };
 }

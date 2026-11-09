@@ -83,6 +83,22 @@ export function disputeHold(): HttpError {
   );
 }
 
+export function hostPayoutAccountMissing(): HttpError {
+  return new HttpError(
+    409,
+    "HOST_PAYOUT_ACCOUNT_MISSING",
+    "This host does not have a Razorpay fund account reference.",
+  );
+}
+
+export function payoutProviderUnavailable(): HttpError {
+  return new HttpError(
+    503,
+    "PAYOUT_PROVIDER_UNCONFIGURED",
+    "RazorpayX account number is not configured.",
+  );
+}
+
 export function hostNotEligible(): HttpError {
   return new HttpError(
     409,

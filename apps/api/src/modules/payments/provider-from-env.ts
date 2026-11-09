@@ -21,7 +21,12 @@ export function paymentProviderFromEnv(env: AppEnv): PaymentProvider {
     ) {
       throw new Error("Invalid environment: RAZORPAY_KEY_ID");
     }
-    return new RazorpayPaymentProvider({ keyId, keySecret, webhookSecret });
+    return new RazorpayPaymentProvider({
+      keyId,
+      keySecret,
+      webhookSecret,
+      accountNumber: env.RAZORPAYX_ACCOUNT_NUMBER ?? null,
+    });
   }
   const keyId = env.PAYMENT_SANDBOX_KEY_ID;
   const keySecret = env.PAYMENT_SANDBOX_KEY_SECRET;

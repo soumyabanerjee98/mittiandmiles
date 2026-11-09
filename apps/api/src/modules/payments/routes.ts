@@ -6,6 +6,8 @@ import {
   readParsedParams,
   validateBody,
   validateParams,
+  validateQuery,
+  readParsedQuery,
 } from "../../middleware/validate.js";
 import { HttpError } from "../../shared/http-error.js";
 import type { AuditWriter } from "../audit/audit-writer.js";
@@ -27,7 +29,9 @@ import {
   idParamsSchema,
   paymentIntentBodySchema,
   payoutBodySchema,
+  payoutListQuerySchema,
   providerParamsSchema,
+  settlePayoutBodySchema,
   refundBodySchema,
   reviewBodySchema,
 } from "./schemas.js";
@@ -219,6 +223,58 @@ export function createPaymentRouter(deps: PaymentRouterDependencies): Router {
         actor.userId,
       );
       res.status(200).json(await deps.payments.ownEarnings(actor));
+    }),
+  );
+
+  router.get(
+    "/admin/payouts",
+    authenticate,
+    validateQuery(payoutListQuerySchema),
+    asyncRoute(async (_req, res) => {
+      await assertPermission(
+        res,
+        deps.audit,
+        Permission.PAYOUT_REVIEW,
+        "payout.list",
+        "payout",
+        "list",
+      );
+      const query = readParsedQuery(res, payoutListQuerySchema);
+      const rows = await deps.payments.listAdminPayouts(query.status);
+      res.status(200).json({ items: rows.map(presentPayout) });
+    }),
+  );
+
+  router.post(
+    "/admin/payouts/:id/settle",
+    authenticate,
+    validateParams(idParamsSchema),
+    validateBody(settlePayoutBodySchema),
+    asyncRoute(async (_req, res) => {
+      const actor = await assertPermission(
+        res,
+        deps.audit,
+        Permission.PAYOUT_REVIEW,
+        "payout.settle",
+        "payout",
+        readParsedParams(res, idParamsSchema).id,
+      );
+      const params = readParsedParams(res, idParamsSchema);
+      const body = readParsedBody(res, settlePayoutBodySchema);
+      const payout = await deps.payments.settlePayout(
+        params.id,
+        body.mode ?? "NEFT",
+      );
+      await deps.audit.write({
+        actorUserId: actor.userId,
+        action: "payout.settle",
+        resourceType: "payout",
+        resourceId: payout.id,
+        requestId: getRequestId(res),
+        outcome: "ALLOWED",
+        metadata: { status: payout.status },
+      });
+      res.status(200).json(presentPayout(payout));
     }),
   );
 
