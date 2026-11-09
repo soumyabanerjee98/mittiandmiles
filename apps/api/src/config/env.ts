@@ -40,11 +40,14 @@ const envSchema = z
     // sandbox is an in-process provider with signature checks. It is not a
     // licence to hold funds or delay settlement. Production must not use it.
     PAYMENT_PROVIDER: z
-      .enum(["unconfigured", "sandbox"])
+      .enum(["unconfigured", "sandbox", "razorpay"])
       .default("unconfigured"),
     PAYMENT_SANDBOX_KEY_ID: z.string().min(8).max(64).optional(),
     PAYMENT_SANDBOX_KEY_SECRET: z.string().min(16).max(256).optional(),
     PAYMENT_SANDBOX_WEBHOOK_SECRET: z.string().min(16).max(256).optional(),
+    RAZORPAY_KEY_ID: z.string().min(8).max(64).optional(),
+    RAZORPAY_KEY_SECRET: z.string().min(8).max(128).optional(),
+    RAZORPAY_WEBHOOK_SECRET: z.string().min(8).max(256).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === "jwt" && env.JWT_SECRET === undefined) {
@@ -73,6 +76,22 @@ const envSchema = z
             code: "custom",
             path: [name],
             message: `${name} is required when PAYMENT_PROVIDER is sandbox.`,
+          });
+        }
+      }
+    }
+    if (env.PAYMENT_PROVIDER === "razorpay") {
+      const required = [
+        "RAZORPAY_KEY_ID",
+        "RAZORPAY_KEY_SECRET",
+        "RAZORPAY_WEBHOOK_SECRET",
+      ] as const;
+      for (const name of required) {
+        if (env[name] === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: [name],
+            message: `${name} is required when PAYMENT_PROVIDER is razorpay.`,
           });
         }
       }

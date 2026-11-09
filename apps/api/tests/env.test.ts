@@ -101,6 +101,40 @@ test("loadEnv requires sandbox secrets without echoing them", () => {
   );
 });
 
+test("loadEnv requires Razorpay secrets without echoing them", () => {
+  const secret = "razorpay-webhook-secret";
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "production",
+        PAYMENT_PROVIDER: "razorpay",
+        RAZORPAY_KEY_ID: "rzp_test_example",
+        RAZORPAY_KEY_SECRET: secret,
+        DATABASE_URL:
+          "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /RAZORPAY_WEBHOOK_SECRET/);
+      assert.equal(error.message.includes(secret), false);
+      return true;
+    },
+  );
+});
+
+test("loadEnv accepts Razorpay in production", () => {
+  const env = loadEnv({
+    NODE_ENV: "production",
+    PAYMENT_PROVIDER: "razorpay",
+    RAZORPAY_KEY_ID: "rzp_test_example",
+    RAZORPAY_KEY_SECRET: "razorpay-key-secret",
+    RAZORPAY_WEBHOOK_SECRET: "razorpay-webhook-secret",
+    DATABASE_URL:
+      "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+  });
+  assert.equal(env.PAYMENT_PROVIDER, "razorpay");
+});
+
 test("loadEnv rejects an unknown authentication mode without echoing it", () => {
   const secret = "trust-client-roles";
   assert.throws(

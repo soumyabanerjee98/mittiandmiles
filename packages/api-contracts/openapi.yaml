@@ -511,8 +511,11 @@ paths:
       operationId: receivePaymentWebhook
       summary: Accept a signed provider webhook
       description: >
-        Verifies the raw-body signature. Duplicate events do not post a second
-        ledger transaction. Invalid signatures are rejected and not stored.
+        Verifies the raw-body signature in the provider's signature header
+        (X-Sandbox-Signature or X-Razorpay-Signature). Razorpay event ids come
+        from X-Razorpay-Event-Id. Duplicate events do not post a second ledger
+        transaction. Invalid signatures are rejected and not stored. A captured
+        provider payment is required before a booking is confirmed.
       responses:
         "200":
           description: Event received. This is not a client payment confirmation.

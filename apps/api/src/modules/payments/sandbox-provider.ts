@@ -74,6 +74,8 @@ export type SignedWebhook = {
 export class SandboxPaymentProvider implements PaymentProvider {
   readonly name = "sandbox";
   readonly configured = true;
+  readonly signatureHeader = "x-sandbox-signature";
+  readonly eventIdHeader = null;
   readonly publicKeyId: string;
   private readonly orders = new Map<string, SandboxOrder>();
   private readonly ordersByKey = new Map<string, SandboxOrder>();
@@ -245,7 +247,14 @@ export class SandboxPaymentProvider implements PaymentProvider {
     return timingSafeEqual(received, expected);
   }
 
-  parseWebhook(rawBody: Buffer): ProviderEvent | null {
+  ignoreWebhook(_rawBody: Buffer, _eventId: string | undefined): boolean {
+    return false;
+  }
+
+  parseWebhook(
+    rawBody: Buffer,
+    _eventId: string | undefined,
+  ): ProviderEvent | null {
     let json: unknown;
     try {
       json = JSON.parse(rawBody.toString("utf8")) as unknown;
@@ -417,6 +426,8 @@ export class UnconfiguredPaymentProvider implements PaymentProvider {
   readonly name = "unconfigured";
   readonly configured = false;
   readonly publicKeyId = null;
+  readonly signatureHeader = "x-sandbox-signature";
+  readonly eventIdHeader = null;
 
   createOrder(): Promise<ProviderOrder> {
     return Promise.reject(new Error("Payment provider is not configured."));
@@ -442,8 +453,15 @@ export class UnconfiguredPaymentProvider implements PaymentProvider {
     return false;
   }
 
-  parseWebhook(): ProviderEvent | null {
+  parseWebhook(
+    _rawBody: Buffer,
+    _eventId: string | undefined,
+  ): ProviderEvent | null {
     return null;
+  }
+
+  ignoreWebhook(_rawBody: Buffer, _eventId: string | undefined): boolean {
+    return false;
   }
 }
 

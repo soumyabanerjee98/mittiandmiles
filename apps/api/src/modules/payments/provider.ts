@@ -23,7 +23,7 @@ export type ProviderPayoutFact = {
   providerPayoutRef: string;
   amountMinor: number;
   currency: string;
-  status: string;
+  status: "pending" | "processed" | "failed" | string;
 };
 
 export type ProviderReport = {
@@ -56,6 +56,10 @@ export type PaymentProvider = {
   readonly name: string;
   readonly configured: boolean;
   readonly publicKeyId: string | null;
+  /** Header that carries the webhook signature. Lowercase for Express. */
+  readonly signatureHeader: string;
+  /** Provider event id header, when the id is not in the body. */
+  readonly eventIdHeader: string | null;
   createOrder(input: {
     amountMinor: number;
     currency: string;
@@ -72,5 +76,10 @@ export type PaymentProvider = {
   fetchRefund(providerRefundRef: string): Promise<ProviderRefundFact | null>;
   report(): Promise<ProviderReport>;
   verifyWebhook(rawBody: Buffer, signatureHeader: string | undefined): boolean;
-  parseWebhook(rawBody: Buffer): ProviderEvent | null;
+  parseWebhook(
+    rawBody: Buffer,
+    eventId: string | undefined,
+  ): ProviderEvent | null;
+  /** Signed event this provider accepts and does not apply. */
+  ignoreWebhook(rawBody: Buffer, eventId: string | undefined): boolean;
 };

@@ -197,10 +197,19 @@ export class PaymentService {
     return { booking, attempt: latest };
   }
 
+  get signatureHeader(): string {
+    return this.provider.signatureHeader;
+  }
+
+  get eventIdHeader(): string | null {
+    return this.provider.eventIdHeader;
+  }
+
   receiveWebhook(
     providerName: string,
     raw: Buffer,
     signature: string | undefined,
+    eventId: string | undefined,
   ): Promise<void> {
     if (!this.provider.configured) {
       throw providerUnavailable();
@@ -211,8 +220,11 @@ export class PaymentService {
     if (!this.provider.verifyWebhook(raw, signature)) {
       throw invalidSignature();
     }
-    const event = this.provider.parseWebhook(raw);
+    const event = this.provider.parseWebhook(raw, eventId);
     if (event === null) {
+      if (this.provider.ignoreWebhook(raw, eventId)) {
+        return Promise.resolve();
+      }
       throw invalid("body");
     }
     return this.lockWebhook(event);

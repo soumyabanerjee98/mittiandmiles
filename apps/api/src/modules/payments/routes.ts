@@ -305,10 +305,12 @@ export function createPaymentRouter(deps: PaymentRouterDependencies): Router {
       limit(`webhook:${req.ip ?? "unknown"}`);
       const params = readParsedParams(res, providerParamsSchema);
       const raw = rawBody(req);
+      const eventHeader = deps.payments.eventIdHeader;
       await deps.payments.receiveWebhook(
         params.provider,
         raw,
-        req.header("x-sandbox-signature"),
+        req.header(deps.payments.signatureHeader),
+        eventHeader === null ? undefined : req.header(eventHeader),
       );
       res.status(200).json({ received: true });
     }),
