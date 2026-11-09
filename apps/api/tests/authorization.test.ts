@@ -276,15 +276,16 @@ test("a staff read fails closed when the audit record cannot be written", async 
   assert.equal(JSON.stringify(response.body).includes(otherId), false);
 });
 
-test("payment capture and role assignment routes are not implemented", async () => {
+test("a client payment body cannot set payment state, and role assignment is not implemented", async () => {
   const app = createTestApp();
   const payment = await request(app)
     .post(
       "/api/v1/bookings/11111111-1111-4111-8111-111111111111/payment-intent",
     )
     .set("Authorization", token("dev-traveller"))
-    .send({ currency: "INR" });
-  assert.equal(payment.status, 404);
+    .send({ currency: "INR", status: "SUCCEEDED" });
+  assert.equal(payment.status, 400);
+  assert.equal(readError(payment.body).code, "VALIDATION_ERROR");
 
   const roles = await request(app)
     .post("/api/v1/admin/roles")

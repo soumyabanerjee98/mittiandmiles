@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request } from "express";
 import type { Logger } from "./shared/logger.js";
 import { MemoryAuditWriter } from "./modules/audit/memory-audit-writer.js";
 import type { AuditWriter } from "./modules/audit/audit-writer.js";
@@ -15,6 +15,10 @@ import { UnconfiguredPrivateStorage } from "./modules/catalogue/document-storage
 import { MemoryCatalogueStore } from "./modules/catalogue/memory-store.js";
 import { createCatalogueRouter } from "./modules/catalogue/routes.js";
 import { CatalogueService } from "./modules/catalogue/service.js";
+import { MemoryPaymentStore } from "./modules/payments/memory-store.js";
+import { createPaymentRouter } from "./modules/payments/routes.js";
+import { PaymentService } from "./modules/payments/service.js";
+import { UnconfiguredPaymentProvider } from "./modules/payments/sandbox-provider.js";
 import { createAccountRouter } from "./modules/users/account-routes.js";
 import { MemoryUserRepository } from "./modules/users/memory-user-repository.js";
 import type { UserRepository } from "./modules/users/user-repository.js";
@@ -28,6 +32,7 @@ export type AppDependencies = {
   auth: AuthService | null;
   catalogue?: CatalogueService;
   bookings?: BookingService;
+  payments?: PaymentService;
 };
 
 export function createApp(
@@ -37,7 +42,16 @@ export function createApp(
   const app = express();
   app.disable("x-powered-by");
   app.use(requestContext(logger));
-  app.use(express.json({ limit: "1mb" }));
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req, _res, buf) => {
+        if ((req.url ?? "").includes("/webhooks/payments/")) {
+          (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+        }
+      },
+    }),
+  );
 
   app.get("/health", (_req, res) => {
     res.status(200).json({
@@ -54,6 +68,12 @@ export function createApp(
     );
   const bookings =
     deps.bookings ?? new BookingService(new MemoryBookingStore());
+  const payments =
+    deps.payments ??
+    new PaymentService(
+      new MemoryPaymentStore(),
+      new UnconfiguredPaymentProvider(),
+    );
   app.use("/api/v1", createAccountRouter(deps));
   app.use(
     "/api/v1",
@@ -71,6 +91,15 @@ export function createApp(
       users: deps.users,
       audit: deps.audit,
       bookings,
+    }),
+  );
+  app.use(
+    "/api/v1",
+    createPaymentRouter({
+      verifier: deps.verifier,
+      users: deps.users,
+      audit: deps.audit,
+      payments,
     }),
   );
   if (deps.auth !== null) {

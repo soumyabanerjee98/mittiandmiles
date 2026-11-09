@@ -61,6 +61,46 @@ test("loadEnv requires JWT_SECRET when AUTH_MODE is jwt", () => {
   );
 });
 
+test("loadEnv refuses the sandbox payment provider in production", () => {
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "production",
+        PAYMENT_PROVIDER: "sandbox",
+        PAYMENT_SANDBOX_KEY_ID: "sandbox-key",
+        PAYMENT_SANDBOX_KEY_SECRET: "sandbox-key-secret-value",
+        PAYMENT_SANDBOX_WEBHOOK_SECRET: "sandbox-webhook-secret",
+        DATABASE_URL:
+          "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /PAYMENT_PROVIDER/);
+      assert.equal(error.message.includes("sandbox-webhook-secret"), false);
+      return true;
+    },
+  );
+});
+
+test("loadEnv requires sandbox secrets without echoing them", () => {
+  const secret = "sandbox-webhook-secret";
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "test",
+        PAYMENT_PROVIDER: "sandbox",
+        DATABASE_URL:
+          "postgresql://postgres.projectref:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /PAYMENT_SANDBOX_KEY_ID/);
+      assert.equal(error.message.includes(secret), false);
+      return true;
+    },
+  );
+});
+
 test("loadEnv rejects an unknown authentication mode without echoing it", () => {
   const secret = "trust-client-roles";
   assert.throws(

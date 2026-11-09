@@ -13,6 +13,9 @@ import { BookingService } from "./modules/bookings/service.js";
 import { UnconfiguredPrivateStorage } from "./modules/catalogue/document-storage.js";
 import { PrismaCatalogueStore } from "./modules/catalogue/prisma-store.js";
 import { CatalogueService } from "./modules/catalogue/service.js";
+import { paymentProviderFromEnv } from "./modules/payments/provider-from-env.js";
+import { PrismaPaymentStore } from "./modules/payments/prisma-store.js";
+import { PaymentService } from "./modules/payments/service.js";
 import { PrismaAuthUserRepository } from "./modules/users/prisma-auth-user-repository.js";
 import { createLogger } from "./shared/logger.js";
 
@@ -47,6 +50,10 @@ function start(): void {
       new UnconfiguredPrivateStorage(),
     ),
     bookings: new BookingService(new PrismaBookingStore(prisma)),
+    payments: new PaymentService(
+      new PrismaPaymentStore(prisma),
+      paymentProviderFromEnv(env),
+    ),
   });
   const server = createServer(app);
 

@@ -2,8 +2,8 @@
 // Money is integer minor units plus an ISO currency code.
 // Instants are UTC. City and experience schedules keep an IANA time zone.
 // Identity documents are storage references only. No card data.
-// Payment tables exist so later phases can migrate forward. Nothing here
-// captures or confirms a payment.
+// A booking is confirmed only from a verified provider fact in the payments
+// module. This schema does not hold funds or choose settlement timing.
 // Commission rows are versioned configuration. This schema does not choose
 // a rate. 15% in the product notes is an example, not a stored default.
 // Authentication provider is unresolved. Users store an external subject.
@@ -199,6 +199,19 @@ enum PayoutStatus {
   ON_HOLD
 }
 
+enum ReconciliationKind {
+  PROVIDER_PAYMENT_MISSING_INTERNAL
+  INTERNAL_PAYMENT_MISSING_PROVIDER
+  AMOUNT_MISMATCH
+  DUPLICATE_CAPTURE
+  DUPLICATE_REFUND
+  DUPLICATE_PAYOUT
+  PAYOUT_MISMATCH
+  UNRESOLVED_PENDING
+  LEDGER_IMBALANCE
+  CAPTURED_BOOKING_NOT_CONFIRMABLE
+}
+
 enum CommissionBasis {
   PERCENTAGE_BPS
 }
@@ -277,6 +290,7 @@ model User {
   documentsReviewed HostDocument[]     @relation("DocumentReviewer")
   auditLogs          AuditLog[]          @relation("AuditActor")
   commandIdempotency CommandIdempotency[]
+  refundsRequested    Refund[]            @relation("RefundRequester")
 
   @@unique([authProvider, authSubject])
   @@index([accountStatus])
@@ -711,10 +725,13 @@ model Refund {
   amountMinor       Int          @map("amount_minor")
   reasonCode        String       @map("reason_code") @db.VarChar(64)
   status            RefundStatus @default(REQUESTED)
+  idempotencyKey    String?      @unique @map("idempotency_key") @db.VarChar(128)
+  requestedById     String?      @map("requested_by_id") @db.Uuid
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  requestedBy User?   @relation("RefundRequester", fields: [requestedById], references: [id], onDelete: Restrict)
 
   @@index([bookingId, status])
   @@map("refunds")
@@ -773,6 +790,7 @@ model Payout {
   amountMinor         Int          @map("amount_minor")
   currency            String       @db.VarChar(3)
   status              PayoutStatus @default(PENDING_ELIGIBILITY)
+  idempotencyKey      String?      @unique @map("idempotency_key") @db.VarChar(128)
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   settledAt           DateTime?    @map("settled_at") @db.Timestamptz(3)
 
@@ -796,6 +814,23 @@ model PayoutAllocation {
   @@unique([payoutId, bookingId])
   @@index([bookingId])
   @@map("payout_allocations")
+}
+
+/// Operations queue. Rows are findings. Nothing here rewrites a payment.
+model ReconciliationException {
+  id            String               @id @default(uuid()) @db.Uuid
+  provider      String               @db.VarChar(64)
+  kind          ReconciliationKind
+  resourceRef   String               @map("resource_ref") @db.VarChar(128)
+  currency      String?              @db.VarChar(3)
+  expectedMinor Int?                 @map("expected_minor")
+  actualMinor   Int?                 @map("actual_minor")
+  detail        String               @db.VarChar(240)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt    DateTime?            @map("resolved_at") @db.Timestamptz(3)
+
+  @@index([kind, resourceRef])
+  @@map("reconciliation_exceptions")
 }
 
 /// History is insert-only. Do not treat any row as the chosen business rate.

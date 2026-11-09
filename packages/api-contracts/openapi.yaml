@@ -457,6 +457,135 @@ paths:
           description: Booking completed, or the existing completed booking.
         "409":
           $ref: "#/components/responses/Error"
+  /api/v1/bookings/{id}/payment-intent:
+    post:
+      operationId: createPaymentIntent
+      summary: Create a provider order for a booking
+      description: >
+        Requires Idempotency-Key and an empty body. Amount and currency come
+        from the booking. The response is checkout data, not payment success.
+        A client status field is rejected. Settlement timing is unconfirmed.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Provider order created. Booking stays awaiting payment.
+        "200":
+          description: Idempotent replay of the same attempt.
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/bookings/{id}/payment-status:
+    get:
+      operationId: readPaymentStatus
+      summary: Read payment status from stored provider facts
+      description: >
+        Does not accept a client payment result. A pending attempt may be
+        refreshed from the configured provider. Settlement timing is unconfirmed.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current booking and payment attempt status.
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/bookings/{id}/refund-requests:
+    post:
+      operationId: createRefundRequest
+      summary: Request a refund without calling the provider
+      description: >
+        Requires Idempotency-Key. Finance review is required before a provider
+        refund is created. The amount cannot exceed the captured remainder.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Refund request recorded.
+        "200":
+          description: Idempotent replay.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/webhooks/payments/{provider}:
+    post:
+      operationId: receivePaymentWebhook
+      summary: Accept a signed provider webhook
+      description: >
+        Verifies the raw-body signature. Duplicate events do not post a second
+        ledger transaction. Invalid signatures are rejected and not stored.
+      responses:
+        "200":
+          description: Event received. This is not a client payment confirmation.
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/hosts/me/payouts:
+    get:
+      operationId: listOwnPayouts
+      summary: List the caller's payout records
+      description: >
+        Records only. Status ELIGIBLE does not mean a provider payout was sent.
+        Settlement timing is unconfirmed.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Payout records for the authenticated host.
+  /api/v1/hosts/me/earnings:
+    get:
+      operationId: readOwnEarnings
+      summary: Read host amounts derived from the ledger
+      description: >
+        Figures are derived from posted ledger entries and payout allocations.
+        There is no mutable balance and no approved settlement time.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ledger-derived amounts. settlement is unconfirmed.
+  /api/v1/admin/refunds/{id}/review:
+    post:
+      operationId: reviewRefund
+      summary: Approve or reject a refund request
+      description: >
+        Requires refund review permission and writes an audit record. Approval
+        submits a provider refund and leaves it pending until a verified
+        provider event. Rejection does not call the provider.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Refund request updated.
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/payouts:
+    post:
+      operationId: recordPayout
+      summary: Record an eligible payout without submitting it
+      description: >
+        Requires Idempotency-Key and payout review permission. Creates an
+        ELIGIBLE record and allocations. Does not submit a provider payout and
+        does not set a settlement time.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Payout record created with settlement unconfirmed.
+        "200":
+          description: Idempotent replay.
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/reconciliation/runs:
+    post:
+      operationId: runReconciliation
+      summary: Compare provider facts with internal records
+      description: >
+        Writes an exception queue for mismatches. Does not change payment,
+        refund, payout, or ledger rows.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Newly recorded exceptions.
 components:
   securitySchemes:
     bearerAuth:

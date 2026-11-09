@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Mitti and Miles API. Phase 4 trip requests, offers, and the booking state machine. No payment capture.",
+  "description": "Mitti and Miles API. Phase 5 sandbox payments, ledger, refunds, payout records, and reconciliation. Settlement timing is unconfirmed.",
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch --env-file=.env src/server.ts",

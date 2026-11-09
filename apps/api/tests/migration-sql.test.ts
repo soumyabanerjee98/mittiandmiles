@@ -71,3 +71,24 @@ test("the booking command migration keeps idempotency and one pending offer", ()
   }
   assert.equal(sql.toLowerCase().includes("succeeded"), false);
 });
+
+test("the payment migration adds idempotency and an exception queue", () => {
+  const sql = readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../prisma/migrations/20261023140000_payment_operations/migration.sql",
+    ),
+    "utf8",
+  );
+  for (const snippet of [
+    'ADD COLUMN "idempotency_key"',
+    "refunds_idempotency_key_key",
+    "payouts_idempotency_key_key",
+    'CREATE TABLE "reconciliation_exceptions"',
+    "LEDGER_IMBALANCE",
+    "CAPTURED_BOOKING_NOT_CONFIRMABLE",
+  ]) {
+    assert.equal(sql.includes(snippet), true, snippet);
+  }
+  assert.equal(sql.toLowerCase().includes("hold funds"), false);
+});

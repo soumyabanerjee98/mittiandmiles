@@ -1,7 +1,6 @@
 /**
- * Booking lifecycle. There is no transition into CONFIRMED.
- * Payment confirmation belongs to phase 5 and must come from a verified
- * provider fact, not from a client call in this module.
+ * Booking lifecycle. This module has no action that marks a booking paid.
+ * CONFIRMED is written by the payments module from a verified provider fact.
  */
 export const BookingStatus = {
   REQUESTED: "REQUESTED",
