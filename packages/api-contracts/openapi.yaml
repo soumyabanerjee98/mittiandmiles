@@ -244,6 +244,24 @@ paths:
       responses:
         "200":
           description: Status, note, and document metadata. Storage references are omitted.
+  /api/v1/hosts/me/payout-account:
+    put:
+      operationId: saveHostPayoutAccount
+      summary: Save host bank details after approval
+      description: >
+        Requires the HOST role and a verified host. Creates a Razorpay fund
+        account and stores the holder name, IFSC, last four digits, and fund
+        account id. The full account number is not stored or returned. Rejected
+        before approval.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Verification state including the masked payout account.
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
   /api/v1/hosts/me/documents:
     post:
       operationId: allocateHostDocument

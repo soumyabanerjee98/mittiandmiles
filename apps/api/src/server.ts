@@ -40,6 +40,7 @@ function start(): void {
       ? null
       : new AuthService(users, new PrismaRefreshSessionStore(prisma), jwt);
 
+  const paymentsProvider = paymentProviderFromEnv(env);
   const app = createApp(logger, {
     verifier: createAuthVerifier({ mode: env.AUTH_MODE, jwt }),
     users,
@@ -48,11 +49,12 @@ function start(): void {
     catalogue: new CatalogueService(
       new PrismaCatalogueStore(prisma),
       new UnconfiguredPrivateStorage(),
+      paymentsProvider,
     ),
     bookings: new BookingService(new PrismaBookingStore(prisma)),
     payments: new PaymentService(
       new PrismaPaymentStore(prisma),
-      paymentProviderFromEnv(env),
+      paymentsProvider,
     ),
   });
   const server = createServer(app);

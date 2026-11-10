@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../../shared/http-error.js";
+import {
+  FundAccountUnavailableError,
+  type PaymentProvider,
+} from "../payments/provider.js";
+import { UnconfiguredPaymentProvider } from "../payments/sandbox-provider.js";
 import type { PrivateDocumentStorage } from "./document-storage.js";
 import {
   bookingBlockReason,
@@ -86,6 +91,10 @@ export class CatalogueService {
   constructor(
     private readonly store: CatalogueStore,
     private readonly documents: PrivateDocumentStorage,
+    private readonly payouts: Pick<
+      PaymentProvider,
+      "configured" | "createBankFundAccount"
+    > = new UnconfiguredPaymentProvider(),
     private readonly now: () => Date = () => new Date(),
     private readonly newId: () => string = () => randomUUID(),
   ) {}
@@ -193,6 +202,7 @@ export class CatalogueService {
         onboardingStatus: "NOT_STARTED",
         publicProfileStatus: "HIDDEN",
         verificationNote: null,
+        payoutAccount: null,
         createdAt: this.now().toISOString(),
         documents: [],
       };
@@ -243,6 +253,64 @@ export class CatalogueService {
       onboardingStatus,
       publicProfileStatus,
       verificationNote,
+    });
+    return this.requireHostUser(userId);
+  }
+
+  async savePayoutAccount(
+    userId: string,
+    input: {
+      accountHolderName: string;
+      ifsc: string;
+      accountNumber: string;
+    },
+  ): Promise<HostRecord> {
+    const host = await this.requireHostProfile(userId);
+    if (host.verificationStatus !== "VERIFIED") {
+      throw conflict(
+        "HOST_NOT_APPROVED",
+        "Bank details can be saved after the host is approved.",
+      );
+    }
+    const accountLast4 = input.accountNumber.slice(-4);
+    const unchanged =
+      host.payoutAccount !== null &&
+      host.payoutAccount.accountHolderName === input.accountHolderName &&
+      host.payoutAccount.ifsc === input.ifsc &&
+      host.payoutAccount.accountLast4 === accountLast4;
+    let fundAccountId = host.payoutAccount?.fundAccountId;
+    if (!unchanged || fundAccountId === undefined) {
+      if (!this.payouts.configured) {
+        throw new HttpError(
+          503,
+          "PAYMENT_PROVIDER_UNCONFIGURED",
+          "Payment provider is not configured.",
+        );
+      }
+      try {
+        const created = await this.payouts.createBankFundAccount({
+          hostId: host.id,
+          accountHolderName: input.accountHolderName,
+          ifsc: input.ifsc,
+          accountNumber: input.accountNumber,
+        });
+        fundAccountId = created.fundAccountId;
+      } catch (error: unknown) {
+        if (error instanceof FundAccountUnavailableError) {
+          throw new HttpError(
+            503,
+            "PAYMENT_PROVIDER_UNCONFIGURED",
+            "Payment provider is not configured.",
+          );
+        }
+        throw error;
+      }
+    }
+    await this.store.savePayoutAccount(host.id, {
+      accountHolderName: input.accountHolderName,
+      ifsc: input.ifsc,
+      accountLast4,
+      fundAccountId,
     });
     return this.requireHostUser(userId);
   }

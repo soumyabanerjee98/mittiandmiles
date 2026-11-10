@@ -58,6 +58,12 @@ export type ProviderPayoutEvent = {
   currency: string;
 };
 
+export class FundAccountUnavailableError extends Error {
+  constructor() {
+    super("Payment provider is not configured.");
+  }
+}
+
 export type ProviderEvent =
   ProviderPaymentEvent | ProviderRefundEvent | ProviderPayoutEvent;
 
@@ -96,6 +102,15 @@ export type PaymentProvider = {
     referenceId: string;
   }): Promise<ProviderPayoutFact>;
   fetchPayout(providerPayoutRef: string): Promise<ProviderPayoutFact | null>;
+  /**
+   * Create a host bank-account destination. Does not store the account number.
+   */
+  createBankFundAccount(input: {
+    hostId: string;
+    accountHolderName: string;
+    ifsc: string;
+    accountNumber: string;
+  }): Promise<{ fundAccountId: string }>;
   report(): Promise<ProviderReport>;
   verifyWebhook(rawBody: Buffer, signatureHeader: string | undefined): boolean;
   parseWebhook(

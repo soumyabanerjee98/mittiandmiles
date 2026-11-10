@@ -102,6 +102,11 @@ references to booking/provider transactions.
 ## 7. Payouts
 
 -   Complete required host onboarding/KYC before payout.
+-   After approval, save the host bank account with
+    `PUT /hosts/me/payout-account`. Persist the Razorpay fund-account
+    id, holder name, IFSC, and last four digits. Do not store the full
+    account number. Settlement pays that fund account from the platform
+    RazorpayX account; it does not split the traveller payment.
 -   Determine host payable from ledger and policy, not client data.
 -   Check eligible booking status, refund/dispute holds and provider
     rules.

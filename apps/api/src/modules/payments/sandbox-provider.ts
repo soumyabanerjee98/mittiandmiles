@@ -1,5 +1,11 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { z } from "zod";
+import { FundAccountUnavailableError } from "./provider.js";
 import type {
   PaymentProvider,
   ProviderEvent,
@@ -233,6 +239,21 @@ export class SandboxPaymentProvider implements PaymentProvider {
     this.payoutByKey.set(input.idempotencyKey, fact);
     this.payouts.push(fact);
     return Promise.resolve({ ...fact });
+  }
+
+  createBankFundAccount(input: {
+    hostId: string;
+    accountHolderName: string;
+    ifsc: string;
+    accountNumber: string;
+  }): Promise<{ fundAccountId: string }> {
+    const digest = createHash("sha256")
+      .update(
+        `${input.hostId}:${input.ifsc}:${input.accountNumber.slice(-4)}:${input.accountHolderName}`,
+      )
+      .digest("hex")
+      .slice(0, 14);
+    return Promise.resolve({ fundAccountId: `fa_${digest}` });
   }
 
   fetchPayout(providerPayoutRef: string): Promise<ProviderPayoutFact | null> {
@@ -559,6 +580,10 @@ export class UnconfiguredPaymentProvider implements PaymentProvider {
 
   fetchPayout(): Promise<ProviderPayoutFact | null> {
     return Promise.resolve(null);
+  }
+
+  createBankFundAccount(): Promise<{ fundAccountId: string }> {
+    return Promise.reject(new FundAccountUnavailableError());
   }
 
   report(): Promise<ProviderReport> {

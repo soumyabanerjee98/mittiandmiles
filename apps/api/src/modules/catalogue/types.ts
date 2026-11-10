@@ -123,6 +123,12 @@ export type HostRecord = {
   onboardingStatus: HostOnboardingStatus;
   publicProfileStatus: PublicProfileStatus;
   verificationNote: string | null;
+  payoutAccount: {
+    accountHolderName: string;
+    ifsc: string;
+    accountLast4: string;
+    fundAccountId: string;
+  } | null;
   createdAt: string;
   documents: HostDocumentRecord[];
 };

@@ -234,6 +234,37 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     };
   }
 
+  async createBankFundAccount(input: {
+    hostId: string;
+    accountHolderName: string;
+    ifsc: string;
+    accountNumber: string;
+  }): Promise<{ fundAccountId: string }> {
+    const contact = await this.request("POST", "/contacts", {
+      name: input.accountHolderName.slice(0, 50),
+      type: "vendor",
+      reference_id: input.hostId,
+    });
+    const contactParsed = z.looseObject({ id: ref }).safeParse(contact);
+    if (!contactParsed.success) {
+      throw new Error("Razorpay contact response was not accepted.");
+    }
+    const fund = await this.request("POST", "/fund_accounts", {
+      contact_id: contactParsed.data.id,
+      account_type: "bank_account",
+      bank_account: {
+        name: input.accountHolderName.slice(0, 120),
+        ifsc: input.ifsc,
+        account_number: input.accountNumber,
+      },
+    });
+    const fundParsed = z.looseObject({ id: ref }).safeParse(fund);
+    if (!fundParsed.success) {
+      throw new Error("Razorpay fund account response was not accepted.");
+    }
+    return { fundAccountId: fundParsed.data.id };
+  }
+
   async fetchPayout(
     providerPayoutRef: string,
   ): Promise<ProviderPayoutFact | null> {

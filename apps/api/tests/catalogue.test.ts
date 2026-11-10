@@ -6,6 +6,7 @@ import { MemoryAuditWriter } from "../src/modules/audit/memory-audit-writer.js";
 import { createAuthVerifier } from "../src/modules/auth/verifier.js";
 import { MemoryCatalogueStore } from "../src/modules/catalogue/memory-store.js";
 import { CatalogueService } from "../src/modules/catalogue/service.js";
+import { SandboxPaymentProvider } from "../src/modules/payments/sandbox-provider.js";
 import { UnconfiguredPrivateStorage } from "../src/modules/catalogue/document-storage.js";
 import type { CatalogueSeed } from "../src/modules/catalogue/memory-store.js";
 import type {
@@ -70,6 +71,7 @@ function hostRecord(
     onboardingStatus: status === "VERIFIED" ? "COMPLETE" : "NOT_STARTED",
     publicProfileStatus: status === "VERIFIED" ? "VISIBLE" : "HIDDEN",
     verificationNote: null,
+    payoutAccount: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     documents: [],
   };
@@ -167,6 +169,11 @@ function createTestApp(
     catalogue: new CatalogueService(
       new MemoryCatalogueStore(seed),
       new UnconfiguredPrivateStorage(),
+      new SandboxPaymentProvider({
+        keyId: "sandbox-key",
+        keySecret: "sandbox-key-secret-value",
+        webhookSecret: "sandbox-webhook-secret",
+      }),
     ),
   });
 }
@@ -324,6 +331,21 @@ test("host onboarding, ownership, and moderation keep unpublished listings priva
   assert.equal(pending.status, 200);
   assert.equal(textField(pending.body, "verificationStatus"), "PENDING");
 
+  const accountNumber = "123456789012";
+  const tooEarly = await request(app)
+    .put("/api/v1/hosts/me/payout-account")
+    .set("authorization", token("dev-host"))
+    .send({
+      accountHolderName: "Dev Host",
+      ifsc: "HDFC0001234",
+      accountNumber,
+    });
+  assert.equal(tooEarly.status, 409);
+  assert.equal(
+    textField(record(tooEarly.body).error, "code"),
+    "HOST_NOT_APPROVED",
+  );
+
   const opsDecision = await request(app)
     .post(`/api/v1/admin/hosts/${hostId}/verification`)
     .set("authorization", token("dev-operations"))
@@ -337,6 +359,33 @@ test("host onboarding, ownership, and moderation keep unpublished listings priva
   assert.equal(approved.status, 200);
   assert.equal(textField(approved.body, "verificationStatus"), "VERIFIED");
   assert.equal(textField(approved.body, "publicProfileStatus"), "VISIBLE");
+
+  const saved = await request(app)
+    .put("/api/v1/hosts/me/payout-account")
+    .set("authorization", token("dev-host"))
+    .send({
+      accountHolderName: "Dev Host",
+      ifsc: "hdfc0001234",
+      accountNumber,
+    });
+  assert.equal(saved.status, 200);
+  const payoutAccount = record(saved.body).payoutAccount;
+  assert.equal(textField(payoutAccount, "accountLast4"), "9012");
+  assert.equal(textField(payoutAccount, "ifsc"), "HDFC0001234");
+  assert.equal(JSON.stringify(saved.body).includes(accountNumber), false);
+  const replay = await request(app)
+    .put("/api/v1/hosts/me/payout-account")
+    .set("authorization", token("dev-host"))
+    .send({
+      accountHolderName: "Dev Host",
+      ifsc: "HDFC0001234",
+      accountNumber,
+    });
+  assert.equal(replay.status, 200);
+  assert.equal(
+    textField(record(replay.body).payoutAccount, "accountLast4"),
+    "9012",
+  );
 
   const documents = await request(app)
     .get(`/api/v1/admin/hosts/${hostId}/documents`)

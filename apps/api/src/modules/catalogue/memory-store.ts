@@ -168,6 +168,18 @@ export class MemoryCatalogueStore implements CatalogueStore {
     return Promise.resolve();
   }
 
+  savePayoutAccount(
+    hostId: string,
+    account: NonNullable<HostRecord["payoutAccount"]>,
+  ): Promise<void> {
+    const host = this.hosts.find((row) => row.id === hostId);
+    if (host === undefined) {
+      return Promise.reject(new Error("Host profile is missing."));
+    }
+    host.payoutAccount = { ...account };
+    return Promise.resolve();
+  }
+
   insertDocument(document: HostDocumentRecord): Promise<void> {
     const host = this.hosts.find((row) => row.id === document.hostId);
     if (host === undefined) {

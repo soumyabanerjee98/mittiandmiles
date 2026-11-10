@@ -65,6 +65,10 @@ export type CatalogueStore = {
   listHosts(): Promise<HostRecord[]>;
   insertHost(host: HostRecord): Promise<void>;
   updateHost(update: HostProfileUpdate): Promise<void>;
+  savePayoutAccount(
+    hostId: string,
+    account: NonNullable<HostRecord["payoutAccount"]>,
+  ): Promise<void>;
   insertDocument(document: HostDocumentRecord): Promise<void>;
 
   insertExperience(experience: StoredExperience): Promise<void>;

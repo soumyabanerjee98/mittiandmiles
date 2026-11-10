@@ -51,10 +51,14 @@ Account (Bearer access JWT):
 -   `GET /users/:userId` — self or staff `user.read` (staff reads are
     audited).
 
-Not implemented yet on this contract:
+Host profile (implemented, Bearer access JWT, HOST role):
 
 -   `POST /hosts/onboarding`
 -   `GET /hosts/me/verification`
+-   `PUT /hosts/me/payout-account` — only after verification is
+    `VERIFIED`. Body is account holder, IFSC, and account number. The
+    response returns holder, IFSC, and last four digits. The full
+    account number is not stored.
 
 ### Authentication rules (implemented)
 
@@ -138,10 +142,14 @@ unauthorised users.
 -   `GET /hosts/me/bookings`
 -   `GET /hosts/me/earnings`
 -   `GET /hosts/me/payouts`
+-   `PUT /hosts/me/payout-account` — bank details after approval. See
+    section 3. Does not let the host change verification or mark a
+    payout settled.
 -   `POST /hosts/me/reports`
 
 Enforce resource ownership. A host cannot edit another host's listings
-or change verification, commission or payout state.
+or change verification, commission, or payout settlement status. Saving
+their own bank account after approval is the exception above.
 
 ## 9. Messaging and reviews
 

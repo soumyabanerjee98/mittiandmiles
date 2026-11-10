@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { asyncRoute } from "../../middleware/async-handler.js";
+import { getRequestId } from "../../middleware/request-context.js";
 import {
   readParsedBody,
   readParsedParams,
@@ -11,6 +12,7 @@ import {
 import { HttpError } from "../../shared/http-error.js";
 import type { AuditWriter } from "../audit/audit-writer.js";
 import { createAuthenticate } from "../auth/authenticate.js";
+import { getActor } from "../auth/actor.js";
 import { Permission } from "../auth/permissions.js";
 import type { AuthVerifier } from "../auth/verifier.js";
 import type { UserRepository } from "../users/user-repository.js";
@@ -54,6 +56,7 @@ import {
   listingDecisionSchema,
   listingQueueQuerySchema,
   onboardingBodySchema,
+  payoutAccountBodySchema,
   pageQuerySchema,
   scheduleBodySchema,
   verificationDecisionSchema,
@@ -233,6 +236,35 @@ export function createCatalogueRouter(
           "Create a host profile before continuing.",
         );
       }
+      res.status(200).json(presentVerification(host));
+    }),
+  );
+
+  router.put(
+    "/hosts/me/payout-account",
+    authenticate,
+    validateBody(payoutAccountBodySchema),
+    asyncRoute(async (_req, res) => {
+      const actor = await assertHostRole(
+        res,
+        deps.audit,
+        "host.payout_account.save",
+      );
+      const body = readParsedBody(res, payoutAccountBodySchema);
+      const host = await deps.catalogue.savePayoutAccount(actor.userId, body);
+      const saved = host.payoutAccount;
+      await deps.audit.write({
+        actorUserId: getActor(res).userId,
+        action: "host.payout_account.save",
+        resourceType: "host",
+        resourceId: host.id,
+        requestId: getRequestId(res),
+        outcome: "ALLOWED",
+        metadata: {
+          ifsc: saved?.ifsc ?? "",
+          accountLast4: saved?.accountLast4 ?? "",
+        },
+      });
       res.status(200).json(presentVerification(host));
     }),
   );

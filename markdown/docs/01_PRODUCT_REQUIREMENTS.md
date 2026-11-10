@@ -65,6 +65,10 @@ Admin mobile workflows must support searchable/filterable/paginated queues, case
     needs-more-information.
 -   A host cannot publish or accept bookings if the required
     verification is incomplete.
+-   After approval, the host can save a bank account for payouts. The
+    platform stores the account holder, IFSC, last four digits, and the
+    Razorpay fund-account id. It does not store or return the full
+    account number, and it does not ask for bank details before approval.
 -   Verification claims shown publicly must match evidence reviewed.
 
 ### Experience catalogue

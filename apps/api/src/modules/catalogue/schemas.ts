@@ -63,6 +63,23 @@ export const onboardingBodySchema = z
   })
   .strict();
 
+export const payoutAccountBodySchema = z
+  .object({
+    accountHolderName: z
+      .string()
+      .trim()
+      .min(2)
+      .max(120)
+      .regex(/^[A-Za-z][A-Za-z .'-]*$/),
+    ifsc: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
+    accountNumber: z.string().regex(/^[0-9]{9,18}$/),
+  })
+  .strict();
+
 export const documentBodySchema = z
   .object({
     documentType: z.enum(["IDENTITY", "ADDRESS", "CREDENTIAL", "OTHER"]),

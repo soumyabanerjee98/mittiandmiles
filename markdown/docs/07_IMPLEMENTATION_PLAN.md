@@ -44,7 +44,9 @@ fixtures.
 ## Phase 3 --- Cities, hosts and catalogue
 
 Deliver: - cities and admin activation; - host onboarding and
-verification state; - experience CRUD and moderation; - languages and
+verification state; - bank details only after approval, stored as
+holder, IFSC, last four digits, and a Razorpay fund-account id; -
+experience CRUD and moderation; - languages and
 category data; - slots/availability; - search filters and pagination; -
 private document storage interface.
 

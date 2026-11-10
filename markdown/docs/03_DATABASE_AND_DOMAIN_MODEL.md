@@ -26,7 +26,10 @@ locale, timestamps.
 preferences, interests.
 
 `host_profiles`: id, user id, public name, bio, verification status,
-onboarding status, payout provider reference, public profile status.
+onboarding status, payout provider reference, payout account holder
+name, payout IFSC, payout account last four digits, public profile
+status. The payout provider reference is the Razorpay fund-account id.
+The full bank account number is not a column.
 
 `host_documents`: id, host id, document type, private storage reference,
 verification state, reviewer id, review timestamps, retention/deletion

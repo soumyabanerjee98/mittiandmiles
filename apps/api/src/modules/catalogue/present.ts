@@ -36,6 +36,7 @@ export function presentOwnHost(host: HostRecord) {
     verificationStatus: host.verificationStatus,
     onboardingStatus: host.onboardingStatus,
     publicProfileStatus: host.publicProfileStatus,
+    payoutAccount: maskedPayoutAccount(host),
   };
 }
 
@@ -45,6 +46,7 @@ export function presentVerification(host: HostRecord) {
     onboardingStatus: host.onboardingStatus,
     publicProfileStatus: host.publicProfileStatus,
     note: host.verificationNote,
+    payoutAccount: maskedPayoutAccount(host),
     documents: host.documents.map((document) => ({
       id: document.id,
       documentType: document.documentType,
@@ -70,11 +72,23 @@ export function presentHostQueueItem(host: HostRecord) {
     onboardingStatus: host.onboardingStatus,
     publicProfileStatus: host.publicProfileStatus,
     note: host.verificationNote,
+    payoutAccountReady: host.payoutAccount !== null,
     documents: host.documents.map((document) => ({
       id: document.id,
       documentType: document.documentType,
       verificationState: document.verificationState,
     })),
+  };
+}
+
+function maskedPayoutAccount(host: HostRecord) {
+  if (host.payoutAccount === null) {
+    return null;
+  }
+  return {
+    accountHolderName: host.payoutAccount.accountHolderName,
+    ifsc: host.payoutAccount.ifsc,
+    accountLast4: host.payoutAccount.accountLast4,
   };
 }
 

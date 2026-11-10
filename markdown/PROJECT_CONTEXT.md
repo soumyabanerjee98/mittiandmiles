@@ -77,12 +77,14 @@ and compliance review.
 2.  Submit identity and any category-specific credentials through a
     secure flow.
 3.  Wait for review; cannot publish restricted listings before approval.
-4.  Create experiences, pricing, language support and availability.
-5.  Receive requests and submit offers.
-6.  Manage confirmed bookings and communicate through the app.
-7.  Record attendance/completion under platform policy.
-8.  View earnings, commission, payout status and reconciliation details.
-9.  Report incidents and respond to disputes.
+4.  After approval, save bank details for payouts. The full account
+    number is not stored.
+5.  Create experiences, pricing, language support and availability.
+6.  Receive requests and submit offers.
+7.  Manage confirmed bookings and communicate through the app.
+8.  Record attendance/completion under platform policy.
+9.  View earnings, commission, payout status and reconciliation details.
+10. Report incidents and respond to disputes.
 
 ## Commission leakage principles
 

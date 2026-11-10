@@ -222,6 +222,21 @@ export class PrismaCatalogueStore implements CatalogueStore {
     });
   }
 
+  async savePayoutAccount(
+    hostId: string,
+    account: NonNullable<HostRecord["payoutAccount"]>,
+  ): Promise<void> {
+    await this.prisma.hostProfile.update({
+      where: { id: hostId },
+      data: {
+        payoutAccountHolderName: account.accountHolderName,
+        payoutIfsc: account.ifsc,
+        payoutAccountLast4: account.accountLast4,
+        payoutProviderReference: account.fundAccountId,
+      },
+    });
+  }
+
   async insertDocument(document: HostDocumentRecord): Promise<void> {
     await this.prisma.hostDocument.create({
       data: {
@@ -453,6 +468,28 @@ function toCategory(row: {
   };
 }
 
+function payoutAccountOf(row: {
+  payoutAccountHolderName: string | null;
+  payoutIfsc: string | null;
+  payoutAccountLast4: string | null;
+  payoutProviderReference: string | null;
+}): HostRecord["payoutAccount"] {
+  if (
+    row.payoutAccountHolderName === null ||
+    row.payoutIfsc === null ||
+    row.payoutAccountLast4 === null ||
+    row.payoutProviderReference === null
+  ) {
+    return null;
+  }
+  return {
+    accountHolderName: row.payoutAccountHolderName,
+    ifsc: row.payoutIfsc,
+    accountLast4: row.payoutAccountLast4,
+    fundAccountId: row.payoutProviderReference,
+  };
+}
+
 function toHost(row: HostRow): HostRecord {
   return {
     id: row.id,
@@ -482,6 +519,7 @@ function toHost(row: HostRow): HostRecord {
       "public profile status",
     ),
     verificationNote: row.verificationNote,
+    payoutAccount: payoutAccountOf(row),
     createdAt: row.createdAt.toISOString(),
     documents: row.documents.map((document) => ({
       id: document.id,
