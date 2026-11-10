@@ -1,7 +1,7 @@
-/// Capabilities that a future server session may grant.
+/// Navigation hints from the authenticated account payload.
 ///
-/// Phase 1 has no authentication. [adminAccess] must be set only from a
-/// server-verified session. User input must never construct this as true.
+/// [adminAccess] is copied from `GET /me`. It is not inferred from role
+/// names, and nothing in the UI can set it.
 class SessionCapabilities {
   const SessionCapabilities({this.adminAccess = false});
 

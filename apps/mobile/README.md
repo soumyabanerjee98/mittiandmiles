@@ -1,16 +1,7 @@
-# mittiandmiles
+# Mitti and Miles
 
-A new Flutter project.
+Flutter app for travellers and hosts. Admin screens stay behind the existing server capability gate and are not part of this milestone.
 
-## Getting Started
+The app talks only to the completed `/api/v1` endpoints. Access and refresh tokens are stored in the platform keystore. When the payment intent provider is Razorpay, checkout opens the native Razorpay sheet with the server order, amount, and key. The sheet closing does not mark a booking paid. The screen keeps showing the status from `GET /bookings/:id/payment-status`.
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Reviews, reports, messaging, and support tickets are not shown as working flows because those endpoints are not implemented. There is also no API to list a traveller's trip requests or a host's open requests, so those screens open a request by id. Registering an account creates a traveller. Host tools stay disabled until `GET /me` includes the `HOST` role.

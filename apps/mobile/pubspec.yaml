@@ -31,6 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_dotenv: ^5.2.1
+  # Platform keystore for access and refresh tokens. Does not change the API.
+  flutter_secure_storage: ^9.2.4
+  # Native Razorpay checkout sheet. The server still confirms payment.
+  razorpay_flutter: ^1.4.7
 
 dev_dependencies:
   flutter_test:
