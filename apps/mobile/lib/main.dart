@@ -10,7 +10,7 @@ import 'package:mittiandmiles/data/http_marketplace_api.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  await dotenv.load(fileName: 'config.env');
   final config = ApiConfig.fromEnv();
   final tokens = SecureTokenStore();
   final client = ApiClient(
