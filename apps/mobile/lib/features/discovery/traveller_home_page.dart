@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mittiandmiles/features/discovery/discovery_page.dart';
 
 class TravellerHomePage extends StatelessWidget {

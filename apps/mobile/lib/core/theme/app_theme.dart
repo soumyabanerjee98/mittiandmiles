@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Charcoal, leaf, and blue tokens from the product design direction.
 /// Primary green is darkened so white button text keeps readable contrast.

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mittiandmiles/core/session/session_capabilities.dart';
 import 'package:mittiandmiles/features/admin/admin_access_denied_page.dart';
 import 'package:mittiandmiles/features/admin/overview/admin_overview_page.dart';

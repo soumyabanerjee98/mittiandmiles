@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Reviews, reports, and support tickets have no traveller or host API yet.
 class UnavailableJourneyPage extends StatelessWidget {
